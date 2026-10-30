@@ -1,4 +1,4 @@
-﻿# EngineerDiff 使用说明（Windows）
+# EngineerDiff 使用说明（Windows）
 
 EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异比较工具，用于快速找出两版
 定值单/装置配置文件之间的差异。支持：
@@ -28,7 +28,7 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 
 ### 2.1 安装包安装（推荐）
 
-1. 运行 `EngineerDiff-1.0.1-Setup-x64.exe`。
+1. 运行 `EngineerDiff-1.0.2-Setup-x64.exe`。
 2. 按向导完成安装。默认 **仅为当前用户安装**，安装目录为：
 
    ```text
@@ -47,13 +47,13 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 > [Windows Defender 误报处理](windows-defender.md)。校验方法（PowerShell）：
 >
 > ```powershell
-> Get-FileHash .\EngineerDiff-1.0.1-Setup-x64.exe -Algorithm SHA256
+> Get-FileHash .\EngineerDiff-1.0.2-Setup-x64.exe -Algorithm SHA256
 > ```
 
 **静默安装**（批处理/内网分发，Inno Setup 标准参数）：
 
 ```bat
-EngineerDiff-1.0.1-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+EngineerDiff-1.0.2-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 需要为所有用户安装时，可由管理员执行 `/ALLUSERS`（此模式会写入
@@ -76,7 +76,7 @@ EngineerDiff-1.0.1-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 ### 2.3 便携版（免安装）
 
-将 `EngineerDiff-1.0.1-portable-win64.zip` 解压到任意可写目录后，直接运行
+将 `EngineerDiff-1.0.2-portable-win64.zip` 解压到任意可写目录后，直接运行
 `EngineerDiff.exe`。**必须保留解压后的完整目录结构**（`EngineerDiff.exe` 与
 `_internal\` 目录不可分开移动/删除，OCR 模型与 Qt 插件都在其中）。
 
@@ -111,6 +111,24 @@ EngineerDiff-1.0.1-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 | ![Excel 比较](screenshots/excel-compare.png) | ![图片 OCR 比较](screenshots/image-compare.png) |
 
 更多截图见 `docs/screenshots/`（安装后在安装目录 `docs\screenshots\`）。
+
+### 3.1 批量比较（一个基准 + 多个文件）
+
+点击顶部 **“批量…”** 打开批量比较窗口：
+
+1. 第一个文件作为**基准 A**，其余文件依次与基准比较；
+2. 支持通过“添加文件…”或直接拖入窗口添加文件，支持一次选择多个；
+3. 点击“开始批量比较”，生成差异表：行为差异位置，列为基准和每个候选文件；
+4. **只要是任意一个候选文件在该位置与基准不同，整行/对应单元格标红**（或关系），
+   每个候选自己的差异单元格会加深标红；橙色表示 OCR/公式等需要人工复核；
+5. 可“复制差异表”到剪贴板（TSV）。批量比较要求所有文件类型一致（TXT/CSV/XLS/XLSX/
+   图片不能混合）；基准是按列表第一个文件，可通过移除/重新添加调整。
+
+![批量比较差异表](screenshots/batch-compare.png)
+
+批量比较复用普通比较引擎（严格坐标、Excel 公式策略、OCR 匹配规则完全一致），
+图片会逐张 OCR；完全相同的图片会跳过 OCR。批量差异表是“位置 + 各文件值”的汇总，
+需要查看原始内容并直接标红时，仍可在主窗口选择对应两个文件进行双栏比较。
 
 ---
 
@@ -207,6 +225,9 @@ EngineerDiff-1.0.1-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
   中清理。
 - 识别结果保留原图坐标，因此红/橙框位置与截图文字对齐；匹配算法会综合文本相似度、
   几何位置、相邻文字与行列结构，而不是简单按顺序配对。
+- **速度优化**：拖入第一张图片后会在后台预识别并预加载模型；完全相同的图片直接跳过
+  OCR；识别结果按图片 SHA-256 缓存（跨次启动可用）；进程内复用同一个 OCR 模型。
+  首次遇到新截图的耗时仍取决于 CPU 和文字数量（普通办公机通常数秒）。
 
 ---
 

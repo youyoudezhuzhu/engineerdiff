@@ -5,7 +5,10 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
+from PIL import Image
+
 from ..models import ImageComparison, ImageOptions, OcrBox, OcrPage
+from ..ocr.cache import sha256_file
 from ..ocr.engine import CancelCallback, OcrCancelled, OcrError, OcrService, ProgressCallback
 from .matcher import match_pages
 
@@ -17,6 +20,16 @@ _MATCH_SPAN = (70, 96)
 
 class ImageCompareError(RuntimeError):
     """图片比较失败（中文消息可直接展示；OCR 失败不会被视为一致）。"""
+
+
+def _blank_page(path: str) -> OcrPage:
+    try:
+        with Image.open(path) as image:
+            width, height = int(image.width), int(image.height)
+    except Exception:
+        width = height = 0
+    return OcrPage(path=str(path), width=width, height=height, boxes=[],
+                   warnings=["图片完全一致，未执行 OCR"])
 
 
 def _report(progress: ProgressCallback | None, percent: int, message: str) -> None:
@@ -140,6 +153,33 @@ def compare_images(
     started = time.perf_counter()
     _report(progress, 0, "准备图片比较")
     _check_cancel(cancel)
+
+    # 完全相同的文件无需 OCR（常见于批量比较中同一截图被重复加入）。
+    # 这不是“用 OCR 失败冒充一致”：只有字节级 SHA-256 完全一致才跳过。
+    try:
+        has_overrides = bool(options.manual_pairs) or any(
+            bool(v) for v in (options.text_overrides or {}).values()
+        )
+        if (
+            isinstance(ocr, OcrService)
+            and not has_overrides
+            and sha256_file(left_path) == sha256_file(right_path)
+        ):
+            left_page = _blank_page(left_path)
+            right_page = _blank_page(right_path)
+            warnings.append("左右图片文件内容完全一致，已跳过 OCR。")
+            _report(progress, 100, "图片完全一致，跳过 OCR")
+            return ImageComparison(
+                left=left_page,
+                right=right_page,
+                diffs=[],
+                warnings=warnings,
+                transform={"method": "identical-file", "pairs": 0},
+                settings=options.as_dict(),
+                elapsed=time.perf_counter() - started,
+            )
+    except OSError:
+        pass
 
     left_page = _run_ocr(ocr, left_path, "左侧", progress, cancel, warnings)
     _check_cancel(cancel)

@@ -693,3 +693,24 @@ def test_image_pane_fits_after_show_not_thumbnail(qapp, tmp_path: Path):
     qapp.processEvents()
     assert pane.zoom() > zoom_before
     pane.close()
+
+
+def test_identical_image_files_skip_ocr(tmp_path: Path):
+    """字节级相同的图片无需 OCR：这也是批量比较中重复图片的快速路径。"""
+    from tests.assets.generate_images import render_ui_screenshot
+
+    from engineerdiff.image.engine import compare_images
+    from engineerdiff.models import ImageOptions
+    from engineerdiff.ocr.engine import OcrService
+
+    path = render_ui_screenshot(tmp_path / "same.png")["path"]
+    svc = OcrService(tmp_path / "ocr-cache")
+
+    def _should_not_run(*_args, **_kwargs):
+        raise AssertionError("完全相同的图片不应调用 OCR")
+
+    svc.recognize = _should_not_run  # type: ignore[method-assign]
+    comparison = compare_images(path, path, ImageOptions(), svc)
+    assert comparison.diffs == []
+    assert comparison.transform["method"] == "identical-file"
+    assert any("完全一致" in w for w in comparison.warnings)

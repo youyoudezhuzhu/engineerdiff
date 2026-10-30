@@ -164,6 +164,7 @@ def check_docs(c: Checker, dist: Path) -> None:
         "docs/third-party-licenses.md",
         "docs/windows-defender.md",
         "docs/screenshots/text-compare.png",
+        "docs/screenshots/batch-compare.png",
     ):
         path = dist / rel
         c.check(f"交付文件 {rel}", path.is_file() and path.stat().st_size > 0, "存在" if path.is_file() else "缺失")

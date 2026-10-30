@@ -27,6 +27,8 @@ Paddle / ONNX Runtime**。
 - 图片支持鼠标滚轮直接缩放、Shift+滚轮横向平移、拖动查看、Ctrl+V 粘贴截图；
 - Excel 多 Sheet、顺序无关配对、缺失 Sheet 占位、标签差异标红、同步 Sheet 开关、表格缩放；
 - OCR 校对：查看识别框与置信度、修改识别文本、手动建立左右文字对应后重新比较；
+- **批量比较**：选择一个基准文件 + 多个候选文件，生成“任意文件不同即标红”的差异表；
+- **OCR 加速**：首次拖入图片后台预识别、相同图片跳过 OCR、跨次 OCR 缓存、模型进程内共享；
 - 纯离线，无登录、无云服务、无文件上传。
 
 ## 截图
@@ -39,6 +41,8 @@ Paddle / ONNX Runtime**。
 |---|---|
 | ![CSV 比较](docs/screenshots/csv-table.png) | ![OCR 文字框](docs/screenshots/image-ocr-boxes.png) |
 
+![批量比较：任意文件不同即标红](docs/screenshots/batch-compare.png)
+
 ## 系统要求
 
 - Windows 10 / 11 x64；默认按当前用户安装，无需管理员权限；
@@ -48,9 +52,10 @@ Paddle / ONNX Runtime**。
 ## 安装与使用
 
 1. 从 [GitHub Releases](https://github.com/youyoudezhuzhu/engineerdiff/releases/latest) 下载并运行
-   `EngineerDiff-1.0.1-Setup-x64.exe`（或解压便携版 zip，保持 `_internal` 目录完整）；
+   `EngineerDiff-1.0.2-Setup-x64.exe`（或解压便携版 zip，保持 `_internal` 目录完整）；
 2. 选择或拖入左右文件；**拖入后自动比较**（图片先显示原图，再 OCR），截图可 Ctrl+V 粘贴；
 3. 用“上一处/下一处”或 F7/F8 查看差异；需要时点击“重新比较”；
+   点击顶部 **“批量…”** 可选择一个基准 + 多个候选文件，一次查看所有差异；
 4. 详细说明见 [简体中文使用说明](docs/user-guide.md)，限制见 [已知限制](docs/known-limitations.md)；
 5. 未签名安装包可能触发 SmartScreen/Defender 误报，处理方式见 [Defender 误报说明](docs/windows-defender.md)。
 
@@ -117,14 +122,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 1. 运行 **Windows Build & Release**（push `main` 或手动 `workflow_dispatch`）；
 2. 流程：依赖断言 → 全量 pytest（含 OCR）→ PyInstaller onedir → 打包后 `--self-test` →
    Inno Setup → **静默安装 → 安装后 `--self-test` → 静默卸载** → artifact；
-3. 推送 `v1.0.1` tag 自动发布 GitHub Release（安装包、便携 zip、SHA-256）。
+3. 推送 `v1.0.2` tag 自动发布 GitHub Release（安装包、便携 zip、SHA-256）。
 
 本地 Windows 构建（需要 Python 3.11、Inno Setup 6）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
-# 产物：release\EngineerDiff-1.0.1-Setup-x64.exe
-#       release\EngineerDiff-1.0.1-portable-win64.zip
+# 产物：release\EngineerDiff-1.0.2-Setup-x64.exe
+#       release\EngineerDiff-1.0.2-portable-win64.zip
 #       release\sha256sums.txt
 ```
 

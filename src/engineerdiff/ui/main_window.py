@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self._image_panes: dict[str, object] = {}
         self._preview_panes: dict[str, object] = {}
         self._image_sync_ready = False
+        self._prefetching: set[str] = set()
         self._csv_stacks: dict[str, QStackedWidget] = {}
         self._temp_dir = tempfile.mkdtemp(prefix="engineerdiff-paste-")
 
@@ -120,6 +122,7 @@ class MainWindow(QMainWindow):
         self.btn_compare.setObjectName("primary")
         self.btn_compare.setMinimumWidth(110)
         self.btn_settings = self._tool_button("设置", "比较设置")
+        self.btn_batch = self._tool_button("批量…", "同时比较多个文件：第一个为基准，任意文件不同即标红")
 
         row1.addWidget(self._field_label("A", "#0067C0"))
         row1.addWidget(self.left_edit, 1)
@@ -134,6 +137,7 @@ class MainWindow(QMainWindow):
         row1.addWidget(self.btn_reload_right)
         row1.addSpacing(8)
         row1.addWidget(self.btn_compare)
+        row1.addWidget(self.btn_batch)
         row1.addWidget(self.btn_settings)
         fp.addLayout(row1)
 
@@ -287,6 +291,7 @@ class MainWindow(QMainWindow):
         self.btn_swap.clicked.connect(self._swap)
         self.btn_compare.clicked.connect(self._start_compare)
         self.btn_settings.clicked.connect(self._open_settings)
+        self.btn_batch.clicked.connect(self._open_batch_dialog)
         self.btn_prev.clicked.connect(lambda: self._step_diff(-1))
         self.btn_next.clicked.connect(lambda: self._step_diff(1))
         self.cb_sync.toggled.connect(self._on_sync_toggled)
@@ -389,6 +394,17 @@ class MainWindow(QMainWindow):
         q.setValue("general/sync_scroll", s.sync_scroll)
         q.setValue("general/only_diffs", s.only_diffs)
         q.setValue("general/ocr_cache", s.ocr_cache)
+
+    def _open_batch_dialog(self) -> None:
+        try:
+            from .batch_dialog import BatchCompareDialog
+
+            dlg = BatchCompareDialog(
+                self, self._settings, self._left_path, self._right_path
+            )
+            dlg.exec()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "批量比较", f"无法打开批量比较：{exc}")
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)
@@ -494,6 +510,7 @@ class MainWindow(QMainWindow):
             self.lbl_state.setText(f"已选择 {info.name}；拖入另一侧文件后将自动比较。")
             if info.kind == FileKind.IMAGE:
                 self._show_image_previews("等待另一侧图片…")
+                self._prefetch_image_ocr(info.path)
 
     def _reload_side(self, side: str) -> None:
         path = self._left_path if side == "left" else self._right_path
@@ -728,6 +745,28 @@ class MainWindow(QMainWindow):
         self._diffs = []
         self._idx = -1
         self._update_index_label()
+
+    def _prefetch_image_ocr(self, path: str) -> None:
+        """拖入第一张图片后在后台预识别，等待第二张时隐藏模型/推理耗时。"""
+        if not path or path in self._prefetching:
+            return
+        self._prefetching.add(path)
+        try:
+            svc = self._get_ocr_service()
+        except Exception:
+            self._prefetching.discard(path)
+            return
+
+        def run() -> None:
+            try:
+                svc.warmup()
+                svc.recognize(path)
+            except Exception:
+                pass
+            finally:
+                self._prefetching.discard(path)
+
+        threading.Thread(target=run, name="engineerdiff-ocr-prefetch", daemon=True).start()
 
     def _show_image_previews(self, status_text: str) -> None:
         """图片 OCR 前先显示原图，拖入/开始比较后不再空白等待。"""
@@ -1307,6 +1346,7 @@ class MainWindow(QMainWindow):
         self.btn_reload_left.setEnabled(not self._busy and bool(self._left_path))
         self.btn_reload_right.setEnabled(not self._busy and bool(self._right_path))
         self.btn_settings.setEnabled(not self._busy)
+        self.btn_batch.setEnabled(not self._busy)
         self.btn_compare.setText("重新比较" if self._result is not None else "开始比较")
         if not ready and not self._busy:
             if not (self._left_path and self._right_path):

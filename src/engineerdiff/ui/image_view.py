@@ -314,7 +314,11 @@ class ImagePane(QWidget):
         item.setTransformationMode(Qt.SmoothTransformation)
         item.setZValue(0)
         self._scene.addItem(item)
-        if self._page is not None and not self._page.boxes:
+        if (
+            self._page is not None
+            and not self._page.boxes
+            and not any("未执行 OCR" in w or "完全一致" in w for w in self._page.warnings)
+        ):
             label = self._scene.addSimpleText("未识别到文字")
             label.setBrush(QBrush(QColor(120, 120, 120, 220)))
             font = QFont()

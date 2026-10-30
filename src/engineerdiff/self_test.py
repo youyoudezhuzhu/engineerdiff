@@ -183,6 +183,7 @@ def run_self_test(report_path: str | Path = REPORT_NAME) -> int:
             from PySide6.QtWidgets import QApplication
 
             from .ui.main_window import MainWindow
+            from .ui.batch_dialog import BatchCompareDialog  # noqa: F401
             from .ui.image_view import ImagePane  # noqa: F401
             from .ui.spreadsheet_side import SpreadsheetSide  # noqa: F401
 

@@ -185,6 +185,10 @@ class OcrService:
             _ENGINE_INIT_ERROR = None
             return _SHARED_ENGINE
 
+    def warmup(self) -> None:
+        """在后台预加载 OCR 模型；首次图片比较前调用可隐藏冷启动时间。"""
+        self._ensure_engine()
+
     # ------------------------------------------------------------------ 公共 API
     def recognize(
         self,
@@ -217,31 +221,40 @@ class OcrService:
 
         # ---------- 推理 ----------
         self._report(progress, 55, "识别文字")
-        started = time.perf_counter()
         try:
+            # 关键：缓存二次检查 + 推理 + 写缓存都在同一把锁内。
+            # 这样拖入图片后的后台预识别与正式比较并发时，后到线程等待后直接
+            # 命中缓存，不会对同一张图重复推理。
             with self._infer_lock:
+                cached = self._cache.load(key)
+                if cached is not None:
+                    page = self._page_from_cache(cached, path)
+                    if page is not None:
+                        self._report(progress, 100, "使用 OCR 缓存")
+                        return page
+                started = time.perf_counter()
                 result, _elapse = engine(str(path))
+                elapsed = time.perf_counter() - started
+                # OCR 调用本身不可中断：返回后才发现取消，丢弃结果且不写缓存
+                self._check_cancel(cancel)
+                self._report(progress, 90, "整理识别结果")
+                boxes, warnings = self._boxes_from_result(result)
+                page = OcrPage(
+                    path=str(path.resolve()),
+                    width=width,
+                    height=height,
+                    boxes=boxes,
+                    cached=False,
+                    elapsed=elapsed,
+                    warnings=warnings,
+                )
+                self._cache.store(key, self._page_to_cache(page))
+        except OcrCancelled:
+            raise
         except OcrError:
             raise
         except Exception as exc:
             raise OcrError(f"OCR 识别失败：{exc}") from exc
-        elapsed = time.perf_counter() - started
-
-        # OCR 调用本身不可中断：返回后才发现取消，丢弃结果
-        self._check_cancel(cancel)
-
-        self._report(progress, 90, "整理识别结果")
-        boxes, warnings = self._boxes_from_result(result)
-        page = OcrPage(
-            path=str(path.resolve()),
-            width=width,
-            height=height,
-            boxes=boxes,
-            cached=False,
-            elapsed=elapsed,
-            warnings=warnings,
-        )
-        self._cache.store(key, self._page_to_cache(page))
         self._report(progress, 100, "OCR 识别完成")
         return page
 
