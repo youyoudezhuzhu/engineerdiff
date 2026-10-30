@@ -20,14 +20,16 @@ Paddle / ONNX Runtime**。
 | XLS / XLSX | 按 **Sheet 名称**配对，严格坐标单元格比较；公式/缓存值可选；合并单元格 | 单元格红/橙标红，Sheet 标签标红，左右 Sheet 联动 |
 | PNG / JPG / JPEG / BMP | **内置 RapidOCR + ONNX Runtime**，跨分辨率/位置/缩放匹配文字 | 在原截图对应文字/字符位置叠加半透明红/橙框 |
 
-- Windows 11 Fluent Design 风格界面（圆角卡片、Segoe UI Variable、系统蓝强调色）；
+- **Fluent 2 / Windows 11 原生视觉**：顶部“单文件比较 / 批量比较”标签导航、Segoe UI Variable、
+  统一 4/8px 间距与分层圆角、克制的表面层次；设置中可切换**浅色 / 深色 / 跟随系统**；
 - **拖入文件即自动加载并比较**；图片拖入先显示原图，再在后台 OCR；结果页仍可继续拖入新文件替换；
 - 统一差异导航：上一处 / 下一处、当前序号 / 总数、自动定位两侧、同步滚动；
 - 红色 = 确认差异，橙色 = OCR 低置信度/无法可靠配对，需人工复核；
 - 图片支持鼠标滚轮直接缩放、Shift+滚轮横向平移、拖动查看、Ctrl+V 粘贴截图；
 - Excel 多 Sheet、顺序无关配对、缺失 Sheet 占位、标签差异标红、同步 Sheet 开关、表格缩放；
 - OCR 校对：查看识别框与置信度、修改识别文本、手动建立左右文字对应后重新比较；
-- **批量比较**：选择一个基准文件 + 多个候选文件，生成“任意文件不同即标红”的差异表；
+- **批量比较页**：顶部导航直接切换，一个基准 + 多个候选，生成“任意文件不同即标红”的差异矩阵；
+  Excel 按 Sheet 分组并支持折叠，图片可打开“原图对照”查看基准与候选；
 - **OCR 加速**：首次拖入图片后台预识别、相同图片跳过 OCR、跨次 OCR 缓存、模型进程内共享；
 - 纯离线，无登录、无云服务、无文件上传。
 
@@ -35,13 +37,15 @@ Paddle / ONNX Runtime**。
 
 | Excel 多 Sheet | 图片 OCR |
 |---|---|
-| ![Excel 比较](docs/screenshots/excel-compare.png) | ![图片 OCR 比较](docs/screenshots/image-compare.png) |
+| ![Excel 比较](docs/screenshots/excel-structure.png) | ![图片 OCR 比较](docs/screenshots/image-ocr-boxes.png) |
 
-| CSV 表格 | OCR 文字框与置信度 |
+| 深色主题 | CSV 表格 |
 |---|---|
-| ![CSV 比较](docs/screenshots/csv-table.png) | ![OCR 文字框](docs/screenshots/image-ocr-boxes.png) |
+| ![深色主题](docs/screenshots/dark-mode.png) | ![CSV 比较](docs/screenshots/csv-table.png) |
 
-![批量比较：任意文件不同即标红](docs/screenshots/batch-compare.png)
+| 批量比较（Excel Sheet 分组） | 图片批量原图对照 |
+|---|---|
+| ![批量 Excel](docs/screenshots/batch-excel.png) | ![批量原图](docs/screenshots/batch-image-view.png) |
 
 ## 系统要求
 
@@ -52,12 +56,14 @@ Paddle / ONNX Runtime**。
 ## 安装与使用
 
 1. 从 [GitHub Releases](https://github.com/youyoudezhuzhu/engineerdiff/releases/latest) 下载并运行
-   `EngineerDiff-1.0.2-Setup-x64.exe`（或解压便携版 zip，保持 `_internal` 目录完整）；
+   `EngineerDiff-1.1.0-Setup-x64.exe`（或解压便携版 zip，保持 `_internal` 目录完整）；
 2. 选择或拖入左右文件；**拖入后自动比较**（图片先显示原图，再 OCR），截图可 Ctrl+V 粘贴；
 3. 用“上一处/下一处”或 F7/F8 查看差异；需要时点击“重新比较”；
-   点击顶部 **“批量…”** 可选择一个基准 + 多个候选文件，一次查看所有差异；
+   点击顶部 **“批量比较”** 标签可选择一个基准 + 多个候选文件，一次查看所有差异；
 4. 详细说明见 [简体中文使用说明](docs/user-guide.md)，限制见 [已知限制](docs/known-limitations.md)；
-5. 未签名安装包可能触发 SmartScreen/Defender 误报，处理方式见 [Defender 误报说明](docs/windows-defender.md)。
+5. 未签名安装包可能触发 SmartScreen/Defender；**Windows 11 智能应用控制会直接拦截未签名应用且没有单应用白名单**，
+   原因与签名方案见 [代码签名 / 智能应用控制说明](docs/code-signing.md)，Defender 误报见
+   [Defender 误报说明](docs/windows-defender.md)。
 
 示例文件在 [`samples/`](samples/)：TXT、CSV、多 Sheet XLSX、不同尺寸的中文装置截图。
 
@@ -122,14 +128,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 1. 运行 **Windows Build & Release**（push `main` 或手动 `workflow_dispatch`）；
 2. 流程：依赖断言 → 全量 pytest（含 OCR）→ PyInstaller onedir → 打包后 `--self-test` →
    Inno Setup → **静默安装 → 安装后 `--self-test` → 静默卸载** → artifact；
-3. 推送 `v1.0.2` tag 自动发布 GitHub Release（安装包、便携 zip、SHA-256）。
+3. 推送 `v1.1.0` tag 自动发布 GitHub Release（安装包、便携 zip、SHA-256）。
 
 本地 Windows 构建（需要 Python 3.11、Inno Setup 6）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
-# 产物：release\EngineerDiff-1.0.2-Setup-x64.exe
-#       release\EngineerDiff-1.0.2-portable-win64.zip
+# 产物：release\EngineerDiff-1.1.0-Setup-x64.exe
+#       release\EngineerDiff-1.1.0-portable-win64.zip
 #       release\sha256sums.txt
 ```
 

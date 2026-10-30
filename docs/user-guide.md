@@ -28,7 +28,7 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 
 ### 2.1 安装包安装（推荐）
 
-1. 运行 `EngineerDiff-1.0.2-Setup-x64.exe`。
+1. 运行 `EngineerDiff-1.1.0-Setup-x64.exe`。
 2. 按向导完成安装。默认 **仅为当前用户安装**，安装目录为：
 
    ```text
@@ -41,19 +41,20 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 4. 安装程序包含简体中文界面、MIT 许可页、卸载程序，以及随包的使用说明、已知限制和
    第三方许可证（安装目录下 `docs\`、`LICENSES\`、`THIRD-PARTY-NOTICES.md`）。
 
-> 注意：安装包未做代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，
-> 个别电脑上 Microsoft Defender 也可能启发式拦截。请核对 `sha256sums.txt` 中的
-> SHA-256 后再选择“仍要运行”；误报处理见
+> 注意：安装包未做代码签名。Windows SmartScreen 可能提示“未知发布者”，Windows 11
+> **智能应用控制（SAC）会直接阻止未签名应用且没有单应用白名单**；请核对
+> `sha256sums.txt` 中的 SHA-256，并按
+> [代码签名 / 智能应用控制说明](code-signing.md) 处理。Defender 误报见
 > [Windows Defender 误报处理](windows-defender.md)。校验方法（PowerShell）：
 >
 > ```powershell
-> Get-FileHash .\EngineerDiff-1.0.2-Setup-x64.exe -Algorithm SHA256
+> Get-FileHash .\EngineerDiff-1.1.0-Setup-x64.exe -Algorithm SHA256
 > ```
 
 **静默安装**（批处理/内网分发，Inno Setup 标准参数）：
 
 ```bat
-EngineerDiff-1.0.2-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+EngineerDiff-1.1.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 需要为所有用户安装时，可由管理员执行 `/ALLUSERS`（此模式会写入
@@ -76,7 +77,7 @@ EngineerDiff-1.0.2-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 ### 2.3 便携版（免安装）
 
-将 `EngineerDiff-1.0.2-portable-win64.zip` 解压到任意可写目录后，直接运行
+将 `EngineerDiff-1.1.0-portable-win64.zip` 解压到任意可写目录后，直接运行
 `EngineerDiff.exe`。**必须保留解压后的完整目录结构**（`EngineerDiff.exe` 与
 `_internal\` 目录不可分开移动/删除，OCR 模型与 Qt 插件都在其中）。
 
@@ -108,27 +109,44 @@ EngineerDiff-1.0.2-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 | Excel 多工作表比较 | 图片 OCR 比较 |
 |---|---|
-| ![Excel 比较](screenshots/excel-compare.png) | ![图片 OCR 比较](screenshots/image-compare.png) |
+| ![Excel 比较](screenshots/excel-structure.png) | ![图片 OCR 比较](screenshots/image-ocr-boxes.png) |
+
+| 深色主题 | 批量 Excel（按 Sheet 分组） |
+|---|---|
+| ![深色主题](screenshots/dark-mode.png) | ![批量 Excel](screenshots/batch-excel.png) |
 
 更多截图见 `docs/screenshots/`（安装后在安装目录 `docs\screenshots\`）。
 
-### 3.1 批量比较（一个基准 + 多个文件）
+### 3.1 界面主题与导航
 
-点击顶部 **“批量…”** 打开批量比较窗口：
+- 顶部标签 **“单文件比较 / 批量比较”** 切换工作模式，右上角“设置”打开比较设置；
+- 默认**跟随 Windows 浅色/深色**；也可在“设置 → 外观 → 界面主题”固定为浅色或深色，
+  切换即时生效并记住；
+- 深色主题会自动调整差异红、待复核橙、表格/文本/图片背景，不会直接复用浅色色值；
+- 使用 Segoe UI Variable / 等宽数字，窗口保持原生标题栏、阴影与标准最小化/最大化/关闭。
+
+![深色主题](screenshots/dark-mode.png)
+
+### 3.2 批量比较（一个基准 + 多个文件）
+
+点击顶部 **“批量比较”** 标签：
 
 1. 第一个文件作为**基准 A**，其余文件依次与基准比较；
 2. 支持通过“添加文件…”或直接拖入窗口添加文件，支持一次选择多个；
-3. 点击“开始批量比较”，生成差异表：行为差异位置，列为基准和每个候选文件；
+3. 点击“开始批量比较”，生成差异矩阵：行为差异位置，列为基准和每个候选文件；
 4. **只要是任意一个候选文件在该位置与基准不同，整行/对应单元格标红**（或关系），
    每个候选自己的差异单元格会加深标红；橙色表示 OCR/公式等需要人工复核；
 5. 可“复制差异表”到剪贴板（TSV）。批量比较要求所有文件类型一致（TXT/CSV/XLS/XLSX/
-   图片不能混合）；基准是按列表第一个文件，可通过移除/重新添加调整。
+   图片不能混合）；基准是按列表第一个文件，可通过移除/重新添加调整；
+6. Excel 结果按工作表分组，点击组标题可折叠/展开；图片结果可点“原图对照”，
+   选择候选文件查看基准/候选原图，滚轮缩放、拖动平移并支持同步缩放。
 
 ![批量比较差异表](screenshots/batch-compare.png)
 
 批量比较复用普通比较引擎（严格坐标、Excel 公式策略、OCR 匹配规则完全一致），
-图片会逐张 OCR；完全相同的图片会跳过 OCR。批量差异表是“位置 + 各文件值”的汇总，
-需要查看原始内容并直接标红时，仍可在主窗口选择对应两个文件进行双栏比较。
+图片会逐张 OCR；完全相同的图片会跳过 OCR。批量矩阵是“位置 + 各文件值”的汇总，
+需要查看原始内容并直接标红时，仍可在主窗口选择对应两个文件进行双栏比较；图片批量
+也可直接用“原图对照”查看。
 
 ---
 

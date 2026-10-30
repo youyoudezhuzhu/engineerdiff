@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -83,12 +84,21 @@ class MainWindow(QMainWindow):
         self._preview_panes: dict[str, object] = {}
         self._image_sync_ready = False
         self._prefetching: set[str] = set()
+        self._batch_page = None
+        self.batch_page = None
+        self._single_status: tuple[str, str, str, str] | None = None
         self._csv_stacks: dict[str, QStackedWidget] = {}
         self._temp_dir = tempfile.mkdtemp(prefix="engineerdiff-paste-")
 
         self._build_ui()
         self._restore_geometry()
         self._apply_mode_controls()
+        theme.register_listener(self._on_theme_changed)
+        self._on_theme_changed(theme.palette())
+        try:
+            QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_system_scheme_changed)
+        except Exception:
+            pass
         self._update_ui_state()
 
     # ================================================================== UI
@@ -97,7 +107,41 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
         root.setContentsMargins(10, 8, 10, 4)
-        root.setSpacing(6)
+        root.setSpacing(8)
+
+        # ---------- Fluent 顶部导航 ----------
+        header = QWidget()
+        header.setObjectName("appHeader")
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(4, 2, 4, 2)
+        hl.setSpacing(8)
+        self.lbl_brand = QLabel("EngineerDiff")
+        self.lbl_brand.setObjectName("brandTitle")
+        self.lbl_subtitle = QLabel("工程文件差异比较")
+        self.lbl_subtitle.setObjectName("brandSubtitle")
+        hl.addWidget(self.lbl_brand)
+        hl.addWidget(self.lbl_subtitle)
+        hl.addSpacing(14)
+        self.nav = QTabBar()
+        self.nav.setObjectName("modeNav")
+        self.nav.addTab("单文件比较")
+        self.nav.addTab("批量比较")
+        self.nav.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        hl.addWidget(self.nav)
+        hl.addStretch(1)
+        self.btn_settings = self._tool_button("设置", "比较设置")
+        hl.addWidget(self.btn_settings)
+        root.addWidget(header)
+
+        self.pages = QStackedWidget()
+        root.addWidget(self.pages, 1)
+
+        # 单文件比较页
+        self.single_page = QWidget()
+        single_layout = QVBoxLayout(self.single_page)
+        single_layout.setContentsMargins(0, 0, 0, 0)
+        single_layout.setSpacing(6)
+        self.pages.addWidget(self.single_page)
 
         # ---------- 顶部文件区 ----------
         self.file_panel = QFrame()
@@ -121,24 +165,21 @@ class MainWindow(QMainWindow):
         self.btn_compare = QPushButton("开始比较")
         self.btn_compare.setObjectName("primary")
         self.btn_compare.setMinimumWidth(110)
-        self.btn_settings = self._tool_button("设置", "比较设置")
-        self.btn_batch = self._tool_button("批量…", "同时比较多个文件：第一个为基准，任意文件不同即标红")
-
-        row1.addWidget(self._field_label("A", "#0067C0"))
+        self.lbl_a = self._field_label("A", "#0067C0")
+        row1.addWidget(self.lbl_a)
         row1.addWidget(self.left_edit, 1)
         row1.addWidget(self.btn_pick_left)
         row1.addWidget(self.btn_reload_left)
         row1.addSpacing(4)
         row1.addWidget(self.btn_swap)
         row1.addSpacing(4)
-        row1.addWidget(self._field_label("B", "#8A8A8A"))
+        self.lbl_b = self._field_label("B", "#8A8A8A")
+        row1.addWidget(self.lbl_b)
         row1.addWidget(self.right_edit, 1)
         row1.addWidget(self.btn_pick_right)
         row1.addWidget(self.btn_reload_right)
         row1.addSpacing(8)
         row1.addWidget(self.btn_compare)
-        row1.addWidget(self.btn_batch)
-        row1.addWidget(self.btn_settings)
         fp.addLayout(row1)
 
         # ---------- 差异工具栏 ----------
@@ -217,7 +258,7 @@ class MainWindow(QMainWindow):
         self.image_tools.setVisible(False)
         row2.addWidget(self.image_tools)
         fp.addLayout(row2)
-        root.addWidget(self.file_panel)
+        single_layout.addWidget(self.file_panel)
 
         # ---------- 警告条 ----------
         self.warning_bar = QFrame()
@@ -235,7 +276,7 @@ class MainWindow(QMainWindow):
         wb.addWidget(self.lbl_warning, 1)
         wb.addWidget(self.btn_warning)
         self.warning_bar.setVisible(False)
-        root.addWidget(self.warning_bar)
+        single_layout.addWidget(self.warning_bar)
 
         # ---------- 左右内容 ----------
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -248,7 +289,19 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.right_pane)
         self.splitter.setSizes([700, 700])
-        root.addWidget(self.splitter, 1)
+        single_layout.addWidget(self.splitter, 1)
+
+        # 批量比较页（复用现有批量界面，作为主窗口页面而非独立弹窗）
+        try:
+            from .batch_dialog import BatchCompareDialog
+
+            self.batch_page = BatchCompareDialog(self, self._settings)
+            self.batch_page.setWindowFlags(Qt.Widget)
+            self.batch_page.btn_close.hide()
+            self.batch_page.setMinimumSize(0, 0)
+            self.pages.addWidget(self.batch_page)
+        except Exception:
+            self.batch_page = None
 
         # ---------- 状态栏 ----------
         status = QStatusBar()
@@ -291,7 +344,7 @@ class MainWindow(QMainWindow):
         self.btn_swap.clicked.connect(self._swap)
         self.btn_compare.clicked.connect(self._start_compare)
         self.btn_settings.clicked.connect(self._open_settings)
-        self.btn_batch.clicked.connect(self._open_batch_dialog)
+        self.nav.currentChanged.connect(self._switch_page)
         self.btn_prev.clicked.connect(lambda: self._step_diff(-1))
         self.btn_next.clicked.connect(lambda: self._step_diff(1))
         self.cb_sync.toggled.connect(self._on_sync_toggled)
@@ -354,6 +407,64 @@ class MainWindow(QMainWindow):
         f.setFixedHeight(18)
         return f
 
+    # ================================================================== theme
+    def _on_system_scheme_changed(self, *_args) -> None:
+        if self._settings.theme == "system":
+            theme.apply_theme("system", QApplication.instance())
+
+    def _on_theme_changed(self, palette=None) -> None:
+        p = palette or theme.palette()
+        from . import grid_view, image_view, spreadsheet_side
+
+        try:
+            grid_view.refresh_palette()
+            spreadsheet_side.refresh_palette()
+            image_view.refresh_palette()
+        except Exception:
+            pass
+        try:
+            self.left_pane.apply_theme(p)
+            self.right_pane.apply_theme(p)
+        except Exception:
+            pass
+        self.file_panel.setStyleSheet(
+            f"QFrame#filePanel {{ background:{p.card_bg}; border:1px solid {p.divider}; border-radius:10px; }}"
+        )
+        self.warning_bar.setStyleSheet(
+            f"QFrame {{ background:{p.warning_bg}; border:1px solid {p.warning}; border-radius:6px; }}"
+            f"QLabel {{ color:{p.warning_text}; border:none; background:transparent; }}"
+            f"QPushButton {{ background:transparent;border:none;color:{p.accent};text-decoration:underline; }}"
+        )
+        for label in (self.lbl_index, self.lbl_zoom, self.lbl_diff, self.lbl_state):
+            label.setStyleSheet(label.styleSheet())
+        self.lbl_state.setStyleSheet(f"color:{p.text_secondary};")
+        self.lbl_diff.setStyleSheet(f"font-weight:600;color:{p.text_secondary};")
+        self.lbl_zoom.setStyleSheet(f"color:{p.text_secondary};")
+        self.lbl_index.setStyleSheet(f"font-weight:600;color:{p.text};")
+        self.lbl_warn_count.setStyleSheet(f"color:{p.warning_text};")
+        self.lbl_a.setStyleSheet(
+            f"background:{p.accent};color:white;border-radius:4px;font-weight:600;font-size:9pt;"
+        )
+        self.lbl_b.setStyleSheet(
+            f"background:{p.text_secondary};color:white;border-radius:4px;font-weight:600;font-size:9pt;"
+        )
+        for tv in self._text_views.values():
+            tv.viewport().update()
+        for ss in self._sheet_sides.values():
+            ss.tab_bar().update()
+            ss.grid().viewport().update()
+        for ip in self._preview_panes.values():
+            try: ip.apply_theme()
+            except Exception: pass
+        for ip in self._image_panes.values():
+            try: ip.apply_theme()
+            except Exception: pass
+        self.update()
+        theme.apply_dark_title_bar(self)
+        if self.batch_page is not None:
+            try: self.batch_page.apply_theme()
+            except Exception: pass
+
     # ================================================================== settings
     def _load_settings(self) -> None:
         q = self._qsettings
@@ -377,6 +488,9 @@ class MainWindow(QMainWindow):
         s.sync_scroll = q.value("general/sync_scroll", True, type=bool)
         s.only_diffs = q.value("general/only_diffs", False, type=bool)
         s.ocr_cache = q.value("general/ocr_cache", True, type=bool)
+        s.theme = str(q.value("general/theme", "system"))
+        if s.theme not in ("system", "light", "dark"):
+            s.theme = "system"
 
     def _save_settings(self) -> None:
         q = self._qsettings
@@ -394,17 +508,35 @@ class MainWindow(QMainWindow):
         q.setValue("general/sync_scroll", s.sync_scroll)
         q.setValue("general/only_diffs", s.only_diffs)
         q.setValue("general/ocr_cache", s.ocr_cache)
+        q.setValue("general/theme", s.theme)
+
+    def _switch_page(self, index: int) -> None:
+        self.pages.setCurrentIndex(max(0, min(1, index)))
+        if index == 1 and self.batch_page is not None:
+            if self._single_status is None:
+                self._single_status = (
+                    self.lbl_type.text(), self.lbl_state.text(),
+                    self.lbl_diff.text(), self.lbl_ocr.text(),
+                )
+            self.batch_page.sync_files(self._left_path, self._right_path)
+            self.lbl_type.setText("批量比较")
+            self.lbl_state.setText("批量矩阵：第一个文件为基准 A")
+            self.lbl_diff.setText("")
+            self.lbl_ocr.setText("")
+            self.lbl_warn_count.setText("")
+            self.progress.setVisible(False)
+            self.btn_cancel_worker.setVisible(False)
+        elif index == 0:
+            if self._single_status is not None:
+                self.lbl_type.setText(self._single_status[0])
+                self.lbl_state.setText(self._single_status[1])
+                self.lbl_diff.setText(self._single_status[2])
+                self.lbl_ocr.setText(self._single_status[3])
+                self._single_status = None
+            self._update_ui_state()
 
     def _open_batch_dialog(self) -> None:
-        try:
-            from .batch_dialog import BatchCompareDialog
-
-            dlg = BatchCompareDialog(
-                self, self._settings, self._left_path, self._right_path
-            )
-            dlg.exec()
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "批量比较", f"无法打开批量比较：{exc}")
+        self.nav.setCurrentIndex(1)
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)
@@ -415,6 +547,7 @@ class MainWindow(QMainWindow):
             self.cb_only.setChecked(self._settings.only_diffs)
             self.cb_sheet_sync.setChecked(self._settings.sync_sheets)
             self._save_settings()
+            theme.apply_theme(self._settings.theme, QApplication.instance())
             self.cb_boxes.blockSignals(True)
             self.cb_boxes.setChecked(self._settings.image.show_boxes)
             self.cb_boxes.blockSignals(False)
@@ -1346,7 +1479,6 @@ class MainWindow(QMainWindow):
         self.btn_reload_left.setEnabled(not self._busy and bool(self._left_path))
         self.btn_reload_right.setEnabled(not self._busy and bool(self._right_path))
         self.btn_settings.setEnabled(not self._busy)
-        self.btn_batch.setEnabled(not self._busy)
         self.btn_compare.setText("重新比较" if self._result is not None else "开始比较")
         if not ready and not self._busy:
             if not (self._left_path and self._right_path):

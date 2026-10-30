@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import DiffItem, ImageComparison, OcrPage
+from . import theme
 
 #: 覆盖层颜色
 COLOR_CONFIRMED = QColor(198, 40, 40)  # 红：确定差异
@@ -34,6 +35,18 @@ COLOR_PLACEHOLDER_TEXT = QColor(120, 120, 120)
 
 MIN_ZOOM = 0.02
 MAX_ZOOM = 8.0
+
+
+def refresh_palette() -> None:
+    global COLOR_CONFIRMED, COLOR_UNCERTAIN, COLOR_OCR_BOX, COLOR_BG
+    global COLOR_PLACEHOLDER, COLOR_PLACEHOLDER_TEXT
+    p = theme.palette()
+    COLOR_CONFIRMED = QColor(p.diff_red)
+    COLOR_UNCERTAIN = QColor(p.warning)
+    COLOR_OCR_BOX = QColor(p.accent)
+    COLOR_BG = QColor(p.app_bg)
+    COLOR_PLACEHOLDER = QColor(p.placeholder_bg)
+    COLOR_PLACEHOLDER_TEXT = QColor(p.text_secondary)
 
 
 class _GraphicsView(QGraphicsView):
@@ -271,6 +284,17 @@ class ImagePane(QWidget):
         self._ocr_box_items.clear()
         self._render_placeholder("未加载图片")
         self._fit_pending = True
+
+    def apply_theme(self) -> None:
+        """主题切换后刷新背景与覆盖层颜色。"""
+        refresh_palette()
+        self._view.setBackgroundBrush(QBrush(COLOR_BG))
+        self._scene.setBackgroundBrush(QBrush(COLOR_BG))
+        if self._pixmap is not None:
+            self._rebuild_scene()
+        else:
+            self._render_placeholder("未加载图片")
+        self.viewport().update() if hasattr(self, "viewport") else None
 
     # ------------------------------------------------------------------ 内部渲染
     def _render_placeholder(self, text: str) -> None:

@@ -123,6 +123,7 @@ class BatchCompareDialog(QDialog):
         self._result: BatchResult | None = None
         self._ocr: OcrService | None = None
         self._build_ui()
+        self.apply_theme()
         for path in (initial_left, initial_right):
             if path:
                 self._add_paths([path])
@@ -133,35 +134,31 @@ class BatchCompareDialog(QDialog):
         root.setContentsMargins(12, 12, 12, 10)
         root.setSpacing(8)
 
-        title = QLabel("批量比较")
-        title.setStyleSheet("font-size:17pt;font-weight:600;color:#1B1B1B;")
-        root.addWidget(title)
+        self.lbl_page_title = QLabel("批量比较")
+        self.lbl_page_title.setObjectName("pageTitle")
+        root.addWidget(self.lbl_page_title)
         hint = QLabel(
             "第一个文件作为基准 A；其余文件依次与基准比较。"
             "同一位置只要有任意一个文件不同，整行标红（或关系）。"
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#616161;")
+        self.lbl_hint = hint
         root.addWidget(hint)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
+        self._splitter = splitter
 
         # 文件面板
         file_panel = QFrame()
         file_panel.setObjectName("filePanel")
-        file_panel.setStyleSheet(
-            "QFrame#filePanel { background:#FFFFFF; border:1px solid #E0E0E0; border-radius:8px; }"
-        )
         fp = QVBoxLayout(file_panel)
         fp.setContentsMargins(10, 8, 10, 8)
         fp.setSpacing(6)
         fph = QHBoxLayout()
         self.lbl_baseline = QLabel("基准：未选择")
-        self.lbl_baseline.setStyleSheet("font-weight:600;color:#1B1B1B;")
         fph.addWidget(self.lbl_baseline, 1)
         self.lbl_count = QLabel("共 0 个文件")
-        self.lbl_count.setStyleSheet("color:#616161;")
         fph.addWidget(self.lbl_count)
         fp.addLayout(fph)
 
@@ -193,42 +190,44 @@ class BatchCompareDialog(QDialog):
 
         # 结果面板
         result_panel = QFrame()
-        result_panel.setStyleSheet("QFrame { background:#FFFFFF; border:1px solid #E0E0E0; border-radius:8px; }")
+        result_panel.setObjectName("batchResultPanel")
         rp = QVBoxLayout(result_panel)
         rp.setContentsMargins(10, 8, 10, 8)
         rp.setSpacing(6)
         result_head = QHBoxLayout()
         self.lbl_summary = QLabel("尚未开始比较")
-        self.lbl_summary.setStyleSheet("font-weight:600;color:#1B1B1B;")
         result_head.addWidget(self.lbl_summary, 1)
         legend = QLabel("红 = 确定差异 · 橙 = 需人工复核")
-        legend.setStyleSheet("color:#616161;")
         result_head.addWidget(legend)
         self.btn_copy = QPushButton("复制差异表")
         self.btn_copy.setObjectName("tool")
         self.btn_copy.setEnabled(False)
         result_head.addWidget(self.btn_copy)
+        self.btn_image = QPushButton("原图对照")
+        self.btn_image.setObjectName("tool")
+        self.btn_image.setEnabled(False)
+        self.btn_image.setVisible(False)
+        self.btn_image.clicked.connect(self._open_image_view)
+        result_head.addWidget(self.btn_image)
         rp.addLayout(result_head)
 
         self.table = QTableWidget(0, 2)
+        self._groups: list[tuple[int, list[int], str]] = []
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setWordWrap(False)
-        self.table.setStyleSheet(
-            "QTableWidget { background:#FFFFFF; border:1px solid #E0E0E0; gridline-color:#EEEEEE; }"
-            "QHeaderView::section { background:#FAFAFA; border:none; border-bottom:1px solid #E0E0E0;"
-            "border-right:1px solid #EEEEEE; padding:6px 8px; color:#424242; font-weight:600; }"
-            "QTableWidget::item { padding:4px 6px; }"
-            "QTableWidget::item:selected { background:#E5F1FB; color:#1B1B1B; }"
-        )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setVisible(False)
         rp.addWidget(self.table, 1)
+        self.lbl_result_empty = QLabel("导入 2 个及以上文件后点击“开始批量比较”，差异矩阵将显示在这里。")
+        self.lbl_result_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_result_empty.setStyleSheet("color:#757575;")
+        rp.addWidget(self.lbl_result_empty, 1)
 
         self.lbl_status = QLabel("")
-        self.lbl_status.setStyleSheet("color:#616161;")
         rp.addWidget(self.lbl_status)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -251,9 +250,58 @@ class BatchCompareDialog(QDialog):
         self.btn_cancel.clicked.connect(self._cancel)
         self.btn_copy.clicked.connect(self._copy_table)
         self.btn_close.clicked.connect(self.reject)
+        self.table.cellClicked.connect(self._toggle_group)
         self.file_list.model().rowsInserted.connect(self._refresh_file_count)
         self.file_list.model().rowsRemoved.connect(self._refresh_file_count)
         self._refresh_file_count()
+
+    # ------------------------------------------------------------------ integration
+    def sync_files(self, left: str, right: str) -> None:
+        """主窗口切到批量页时，自动带入当前 A/B；已有批量列表不覆盖。"""
+        if self.file_list.count() <= 1:
+            wanted = [p for p in (left, right) if p]
+            if wanted:
+                self._add_paths(wanted)
+
+    def apply_theme(self) -> None:
+        p = theme.palette()
+        self.setStyleSheet(f"QDialog {{ background:{p.app_bg}; }}")
+        self.lbl_page_title.setStyleSheet(
+            f"font-size:17pt;font-weight:600;color:{p.text};"
+        )
+        self.lbl_hint.setStyleSheet(f"color:{p.text_secondary};")
+        self.lbl_count.setStyleSheet(f"color:{p.text_secondary};")
+        self.lbl_baseline.setStyleSheet(f"font-weight:600;color:{p.text};")
+        self.lbl_summary.setStyleSheet(f"font-weight:600;color:{p.text};")
+        self.lbl_status.setStyleSheet(f"color:{p.text_secondary};")
+        self.lbl_result_empty.setStyleSheet(f"color:{p.text_secondary};")
+        self.table.setStyleSheet(
+            f"QTableWidget {{ background:{p.card_bg}; border:1px solid {p.divider};"
+            f"gridline-color:{p.divider}; color:{p.text}; }}"
+            f"QTableWidget::item {{ padding:4px 6px; }}"
+            f"QTableWidget::item:selected {{ background:{p.accent_soft}; color:{p.text}; }}"
+        )
+        self.file_list.setStyleSheet(
+            f"QListWidget {{ background:{p.card_bg}; border:1px solid {p.divider};"
+            f"border-radius:6px;padding:4px;color:{p.text}; }}"
+            f"QListWidget::item {{ padding:5px 6px; border-radius:4px; }}"
+            f"QListWidget::item:hover {{ background:{p.hover_surface}; }}"
+            f"QListWidget::item:selected {{ background:{p.accent_soft}; color:{p.text}; }}"
+        )
+        for frame in self.findChildren(QFrame):
+            if frame.objectName() == "filePanel":
+                frame.setStyleSheet(
+                    f"QFrame#filePanel {{ background:{p.card_bg}; border:1px solid {p.divider};"
+                    "border-radius:8px; }"
+                )
+            elif frame.objectName() == "batchResultPanel":
+                frame.setStyleSheet(
+                    f"QFrame#batchResultPanel {{ background:{p.card_bg}; border:1px solid {p.divider};"
+                    "border-radius:8px; }"
+                )
+        self.btn_close.setStyleSheet("")
+        if self._result is not None:
+            self._populate(self._result)
 
     # ------------------------------------------------------------------ files
     def _add_paths(self, paths: list[str]) -> None:
@@ -311,6 +359,8 @@ class BatchCompareDialog(QDialog):
             return
         self.table.clearContents()
         self.table.setRowCount(0)
+        self.table.setVisible(False)
+        self.lbl_result_empty.setVisible(True)
         self.lbl_summary.setText("正在比较…")
         self.lbl_status.setText("")
         self._set_running(True)
@@ -355,6 +405,15 @@ class BatchCompareDialog(QDialog):
         else:
             self.lbl_status.setText("完成")
         self.btn_copy.setEnabled(bool(result.rows))
+        # 导入完成后收缩文件区，把主要空间让给差异矩阵
+        self.file_list.setMaximumHeight(112)
+        try:
+            self._splitter.setSizes([142, 620])
+        except Exception:
+            pass
+        is_image = result.mode.value == "image" and any(c.result is not None for c in result.candidates)
+        self.btn_image.setVisible(is_image)
+        self.btn_image.setEnabled(is_image)
 
     def _on_failed(self, message: str) -> None:
         self._set_running(False)
@@ -389,6 +448,10 @@ class BatchCompareDialog(QDialog):
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
     def _populate(self, result: BatchResult) -> None:
+        self.table.setVisible(True)
+        self.lbl_result_empty.setVisible(False)
+        self.table.clearContents()
+        self.table.clearSpans()
         candidates = result.candidates
         n = len(candidates)
         self.table.setColumnCount(2 + n)
@@ -400,38 +463,79 @@ class BatchCompareDialog(QDialog):
         for col, header in enumerate(headers):
             item = self.table.horizontalHeaderItem(col)
             if item is not None:
-                if col == 0:
-                    item.setToolTip("差异所在位置")
-                elif col == 1:
-                    item.setToolTip(result.baseline)
-                else:
-                    item.setToolTip(candidates[col - 2].path)
-        self.table.setRowCount(len(result.rows))
-        for r, row in enumerate(result.rows):
+                item.setToolTip("差异所在位置" if col == 0 else (
+                    result.baseline if col == 1 else candidates[col - 2].path
+                ))
+
+        specs: list[tuple[str, object, int]] = []
+        if result.mode.value == "excel":
+            by_sheet: dict[str, list] = {}
+            for row in result.rows:
+                by_sheet.setdefault(row.sheet or "（无 Sheet）", []).append(row)
+            for sheet, rows_in_sheet in by_sheet.items():
+                specs.append(("group", sheet, len(rows_in_sheet)))
+                specs.extend(("row", row, 0) for row in rows_in_sheet)
+        else:
+            specs.extend(("row", row, 0) for row in result.rows)
+
+        self.table.setRowCount(len(specs))
+        self._groups = []
+        p = theme.palette()
+        group_bg = QColor(p.secondary_surface)
+        strong = QColor(p.diff_red_bg)
+        warning = QColor(p.warning_bg)
+        soft_red = QColor(p.diff_red_bg)
+        soft_red.setAlpha(90)
+        soft_warn = QColor(p.warning_bg)
+        soft_warn.setAlpha(90)
+        for r, (kind, payload, count) in enumerate(specs):
+            if kind == "group":
+                sheet = str(payload)
+                item = QTableWidgetItem(f"  ▾  工作表「{sheet}」 · {count} 处差异")
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+                item.setBackground(group_bg)
+                item.setForeground(QBrush(QColor(p.text)))
+                self.table.setItem(r, 0, item)
+                self.table.setSpan(r, 0, 1, self.table.columnCount())
+                self.table.setRowHeight(r, 30)
+                self._groups.append((r, list(range(r + 1, r + 1 + count)), sheet, count))
+                continue
+            row = payload
             uncertain = row.severity == Severity.UNCERTAIN
-            strong = "#FFF4CE" if uncertain else "#FFD7D5"
-            soft = "#FFFBF0" if uncertain else "#FFF5F5"
+            cell_bg = warning if uncertain else strong
+            row_bg = soft_warn if uncertain else soft_red
             base = QTableWidgetItem(self._short(row.location))
             base.setToolTip(row.location)
-            base.setBackground(QColor(soft))
+            base.setBackground(row_bg)
             self.table.setItem(r, 0, base)
             b = QTableWidgetItem(self._short(row.baseline))
             b.setToolTip(row.baseline)
-            b.setBackground(QColor(strong))
+            b.setBackground(cell_bg)
             self.table.setItem(r, 1, b)
             for c in range(n):
                 value = row.values[c] if c < len(row.values) else "—"
                 it = QTableWidgetItem(self._short(value))
                 it.setToolTip(value)
                 if row.differs[c]:
-                    it.setBackground(QColor(strong))
-                    it.setForeground(QBrush(QColor("#A11212" if not uncertain else "#8A3B00")))
+                    it.setBackground(cell_bg)
+                    it.setForeground(QBrush(QColor(p.diff_red_text if not uncertain else p.warning_text)))
                 self.table.setItem(r, 2 + c, it)
-            for c in range(self.table.columnCount()):
-                item = self.table.item(r, c)
-                if item is not None:
-                    item.setToolTip(item.toolTip() or item.text())
+            self.table.setRowHeight(r, 26)
         self._size_columns()
+
+    def _toggle_group(self, row: int, _column: int = 0) -> None:
+        for group_row, children, sheet, count in self._groups:
+            if group_row != row:
+                continue
+            hidden = not self.table.isRowHidden(children[0]) if children else True
+            for child in children:
+                self.table.setRowHidden(child, hidden)
+            item = self.table.item(group_row, 0)
+            if item is not None:
+                item.setText(f"  {'▸' if hidden else '▾'}  工作表「{sheet}」 · {count} 处差异")
+            return
 
     def _size_columns(self) -> None:
         header = self.table.horizontalHeader()
@@ -448,6 +552,16 @@ class BatchCompareDialog(QDialog):
         super().resizeEvent(event)
         if self.table.columnCount() > 1:
             self._size_columns()
+
+    def _open_image_view(self) -> None:
+        if self._result is None:
+            return
+        try:
+            from .batch_image_dialog import BatchImageDialog
+
+            BatchImageDialog(self._result, self).exec()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "原图对照", f"无法打开原图对照：{exc}")
 
     def _copy_table(self) -> None:
         if self.table.rowCount() == 0:

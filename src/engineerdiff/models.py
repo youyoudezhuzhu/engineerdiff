@@ -445,4 +445,4 @@ class AppSettings:
     sync_sheets: bool = True
     only_diffs: bool = False
     ocr_cache: bool = True
-    theme: str = "light"
+    theme: str = "system"  # system / light / dark

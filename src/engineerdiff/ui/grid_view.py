@@ -25,6 +25,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QWidget
 
 from ..models import Cell, CellType, DiffItem, DiffLocation, Severity, Sheet
+from . import theme
 
 HEADER_WIDTH = 52.0
 HEADER_HEIGHT = 24.0
@@ -40,6 +41,25 @@ COLOR_DIFF_ORANGE_BG = QColor("#FFE2B8")
 COLOR_DIFF_ORANGE_BORDER = QColor("#E65100")
 COLOR_SELECTED = QColor("#0067C0")
 COLOR_HEADER_HIGHLIGHT = QColor("#E5F1FB")
+
+
+def refresh_palette() -> None:
+    """主题切换时更新模块级绘制颜色；所有 GridView 下次重绘即生效。"""
+    global COLOR_BACKGROUND, COLOR_HEADER_BG, COLOR_HEADER_TEXT, COLOR_GRID, COLOR_TEXT
+    global COLOR_DIFF_RED_BG, COLOR_DIFF_RED_BORDER, COLOR_DIFF_ORANGE_BG
+    global COLOR_DIFF_ORANGE_BORDER, COLOR_SELECTED, COLOR_HEADER_HIGHLIGHT
+    p = theme.palette()
+    COLOR_BACKGROUND = QColor(p.card_bg)
+    COLOR_HEADER_BG = QColor(p.secondary_surface)
+    COLOR_HEADER_TEXT = QColor(p.text_secondary)
+    COLOR_GRID = QColor(p.divider)
+    COLOR_TEXT = QColor(p.text)
+    COLOR_DIFF_RED_BG = QColor(p.diff_red_bg)
+    COLOR_DIFF_RED_BORDER = QColor(p.diff_red)
+    COLOR_DIFF_ORANGE_BG = QColor(p.warning_bg)
+    COLOR_DIFF_ORANGE_BORDER = QColor(p.warning)
+    COLOR_SELECTED = QColor(p.accent)
+    COLOR_HEADER_HIGHLIGHT = QColor(p.accent_soft)
 
 MIN_ZOOM = 0.5
 MAX_ZOOM = 2.5
@@ -511,6 +531,17 @@ class GridView(QAbstractScrollArea):
                 self._paint_cell(painter, rect, cell, (row, col))
         painter.restore()
 
+    def _cell_text_color(self, cell: Cell, diff: DiffItem | None) -> QColor:
+        """深色主题下按实际底色选择文字颜色，避免源文件深色字落在深背景上。"""
+        p = theme.palette()
+        if diff is not None:
+            uncertain = diff.severity == Severity.UNCERTAIN or diff.needs_review
+            return QColor(p.warning_text if uncertain else p.diff_red_text)
+        if p.dark:
+            fill = QColor(cell.style.fill_color) if cell.style.fill_color else QColor(p.card_bg)
+            return QColor(p.text) if fill.lightness() < 150 else QColor("#1B1B1B")
+        return QColor(cell.style.font_color)
+
     def _paint_cell(self, painter: QPainter, rect: QRectF, cell: Cell, position: tuple[int, int]) -> None:
         diff = self._diff_map.get(position)
         if diff is not None:
@@ -543,7 +574,7 @@ class GridView(QAbstractScrollArea):
             return
         font = self._cell_font(cell)
         painter.setFont(font)
-        painter.setPen(QColor(cell.style.font_color))
+        painter.setPen(self._cell_text_color(cell, diff))
         text_rect = rect.adjusted(3, 1, -3, -1)
         flags = self._text_flags(cell)
         if cell.style.wrap:

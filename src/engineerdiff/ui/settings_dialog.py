@@ -38,6 +38,15 @@ class SettingsDialog(QDialog):
         tip.setStyleSheet("color:#616161;")
         layout.addWidget(tip)
 
+        appearance_group = QGroupBox("外观")
+        af = QFormLayout(appearance_group)
+        self.cb_theme = QComboBox()
+        self.cb_theme.addItem("跟随 Windows 设置", "system")
+        self.cb_theme.addItem("浅色", "light")
+        self.cb_theme.addItem("深色", "dark")
+        af.addRow("界面主题：", self.cb_theme)
+        layout.addWidget(appearance_group)
+
         text_group = QGroupBox("文本比较")
         tf = QFormLayout(text_group)
         tf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -114,6 +123,8 @@ class SettingsDialog(QDialog):
         self._load(settings)
 
     def _load(self, s: AppSettings) -> None:
+        idx = self.cb_theme.findData(s.theme)
+        self.cb_theme.setCurrentIndex(max(0, idx))
         self.cb_line_endings.setChecked(s.text.ignore_line_endings)
         self.cb_outer_space.setChecked(s.text.ignore_outer_space)
         self.cb_all_space.setChecked(s.text.ignore_all_space)
@@ -132,6 +143,7 @@ class SettingsDialog(QDialog):
 
     def result_settings(self) -> AppSettings:
         s = copy.deepcopy(self._settings)
+        s.theme = self.cb_theme.currentData() or "system"
         s.text.ignore_line_endings = self.cb_line_endings.isChecked()
         s.text.ignore_outer_space = self.cb_outer_space.isChecked()
         s.text.ignore_all_space = self.cb_all_space.isChecked()

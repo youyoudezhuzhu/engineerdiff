@@ -84,6 +84,7 @@ for _rel, _dest in (
     ("docs/known-limitations.md", "docs"),
     ("docs/third-party-licenses.md", "docs"),
     ("docs/windows-defender.md", "docs"),
+    ("docs/code-signing.md", "docs"),
     ("docs/architecture.md", "docs"),
 ):
     _path = PROJECT_ROOT / _rel

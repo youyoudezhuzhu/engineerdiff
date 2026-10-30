@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import DiffItem, SheetStatus, Workbook, WorkbookComparison
+from . import theme
 from .grid_view import GridView
 
 TAB_HEIGHT = 34
@@ -41,6 +42,18 @@ TAB_SELECTED_BACKGROUND = QColor("#E5F1FB")
 TAB_SELECTED_UNDERLINE = QColor("#0067C0")
 
 
+def refresh_palette() -> None:
+    global TAB_COLOR_NORMAL, TAB_COLOR_DIFF, TAB_COLOR_UNCERTAIN
+    global TAB_BACKGROUND, TAB_SELECTED_BACKGROUND, TAB_SELECTED_UNDERLINE
+    p = theme.palette()
+    TAB_COLOR_NORMAL = QColor(p.text_secondary)
+    TAB_COLOR_DIFF = QColor(p.diff_red)
+    TAB_COLOR_UNCERTAIN = QColor(p.warning)
+    TAB_BACKGROUND = QColor(p.secondary_surface)
+    TAB_SELECTED_BACKGROUND = QColor(p.accent_soft)
+    TAB_SELECTED_UNDERLINE = QColor(p.accent)
+
+
 class SheetTabBar(QWidget):
     """底部 Sheet 标签栏（自绘，便于精确控制红色/橙红文字）。"""
 
@@ -52,7 +65,7 @@ class SheetTabBar(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setMouseTracking(True)
         self._names: list[str] = []
-        self._colors: dict[str, QColor] = {}
+        self._status: dict[str, str] = {}
         self._selected: str | None = None
         self._offset = 0
         self._rects: list[tuple[str, QRect]] = []
@@ -67,14 +80,14 @@ class SheetTabBar(QWidget):
         self._names = list(names)
         red = set(red_names)
         orange = set(orange_names)
-        self._colors = {}
+        self._status = {}
         for name in self._names:
             if name in orange:
-                self._colors[name] = TAB_COLOR_UNCERTAIN
+                self._status[name] = "uncertain"
             elif name in red:
-                self._colors[name] = TAB_COLOR_DIFF
+                self._status[name] = "diff"
             else:
-                self._colors[name] = TAB_COLOR_NORMAL
+                self._status[name] = "normal"
         if self._selected not in self._names:
             self._selected = self._names[0] if self._names else None
         self._offset = max(0, min(self._offset, max(0, self._total_width() - self.width())))
@@ -91,7 +104,12 @@ class SheetTabBar(QWidget):
         return self._selected
 
     def color_for(self, name: str) -> QColor:
-        return self._colors.get(name, TAB_COLOR_NORMAL)
+        status = self._status.get(name, "normal")
+        if status == "uncertain":
+            return TAB_COLOR_UNCERTAIN
+        if status == "diff":
+            return TAB_COLOR_DIFF
+        return TAB_COLOR_NORMAL
 
     def tab_rect(self, name: str) -> QRect:
         self._layout()

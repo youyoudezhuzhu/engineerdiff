@@ -53,6 +53,7 @@ class BatchRow:
     severity: Severity = Severity.CONFIRMED
     note: str = ""
     sort_key: tuple = ()
+    sheet: str = ""
 
 
 @dataclass
@@ -212,6 +213,8 @@ def build_batch_result(
         assert cand.result is not None
         for diff in _diff_items(cand.result):
             key, location, has_base, sort_key = _diff_key_and_location(diff, index)
+            loc = diff.left if diff.left is not None else diff.right
+            sheet_name = loc.sheet if loc is not None and loc.sheet else ""
             row = rows.get(key)
             if row is None:
                 row = BatchRow(
@@ -223,11 +226,14 @@ def build_batch_result(
                     severity=diff.severity if diff.is_uncertain else Severity.CONFIRMED,
                     note=diff.detail,
                     sort_key=sort_key,
+                    sheet=sheet_name,
                 )
                 rows[key] = row
             elif not row.baseline or row.baseline == "—":
                 if diff.left is not None:
                     row.baseline = _left_value(diff)
+            if not row.sheet and sheet_name:
+                row.sheet = sheet_name
             row.values[index] = _right_value(diff)
             row.differs[index] = True
             if diff.is_uncertain:

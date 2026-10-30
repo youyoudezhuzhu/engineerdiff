@@ -56,8 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         report = args.self_test_report or str(Path.cwd() / "self-test-report.json")
         return run_self_test(report)
 
-    from PySide6.QtCore import QLocale, Qt
-    from PySide6.QtGui import QColor, QIcon, QPalette
+    from PySide6.QtCore import QLocale, QSettings, Qt
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .ui import theme
@@ -77,17 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     app.setStyle("Fusion")
     QLocale.setDefault(QLocale(QLocale.Language.Chinese, QLocale.Country.China))
     app.setFont(theme.ui_font(10.0))
-    app.setStyleSheet(theme.APP_STYLESHEET)
-    try:
-        palette = app.palette()
-        palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.ACCENT))
-        palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
-        palette.setColor(QPalette.ColorRole.Window, QColor(theme.APP_BG))
-        palette.setColor(QPalette.ColorRole.Base, QColor(theme.PANEL_BG))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#FAFAFA"))
-        app.setPalette(palette)
-    except Exception:
-        pass
+    # 跟随系统/浅色/深色：在创建窗口前应用，避免先闪白再切深色。
+    saved_mode = QSettings(version.ORG_NAME, version.APP_NAME).value("general/theme", "system")
+    theme.apply_theme(str(saved_mode), app)
     icon_path = _resource_path("engineerdiff.ico")
     if not icon_path.exists():
         icon_path = _resource_path("engineerdiff.png")

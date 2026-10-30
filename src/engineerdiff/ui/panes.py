@@ -42,26 +42,16 @@ class SidePane(QFrame):
 
         header = QWidget()
         header.setObjectName("sideHeader")
-        header.setStyleSheet(
-            "QWidget#sideHeader { background:#FAFAFA; border-bottom:1px solid #E0E0E0;"
-            "border-top-left-radius:8px; border-top-right-radius:8px; }"
-        )
+        self._header = header
         h = QHBoxLayout(header)
         h.setContentsMargins(10, 6, 10, 6)
         h.setSpacing(8)
         self.badge = QLabel(side.upper())
         self.badge.setFixedSize(22, 22)
         self.badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.badge.setStyleSheet(
-            "background:#0067C0;color:white;border-radius:4px;font-weight:600;font-size:10pt;"
-            if side == "left"
-            else "background:#8A8A8A;color:white;border-radius:4px;font-weight:600;font-size:10pt;"
-        )
         self.name_label = QLabel("未选择文件")
-        self.name_label.setStyleSheet("font-weight:600;color:#1B1B1B;")
         self.name_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.meta_label = QLabel("")
-        self.meta_label.setStyleSheet("color:#8A8A8A;font-size:9pt;")
         self.meta_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         h.addWidget(self.badge)
         h.addWidget(self.name_label, 1)
@@ -72,7 +62,6 @@ class SidePane(QFrame):
         self._empty = QLabel()
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.setWordWrap(True)
-        self._empty.setStyleSheet("color:#757575;background:#FFFFFF;padding:28px;")
         self._empty.setText(
             "<div style='font-size:15pt;color:#1B1B1B;margin-bottom:10px;'>将文件拖到此处</div>"
             "<div style='font-size:10pt;line-height:1.7;color:#616161;'>松手后立即加载并开始比较（图片会先显示原图，再执行 OCR）<br>"
@@ -82,8 +71,37 @@ class SidePane(QFrame):
         self._stack.addWidget(self._empty)
         self._layout.addWidget(self._stack, 1)
         self._info: FileInfo | None = None
+        self.apply_theme()
 
     # ------------------------------------------------------------------
+    def apply_theme(self, palette=None) -> None:
+        p = palette or theme.palette()
+        self.setStyleSheet(
+            f"QFrame#sidePane {{ background:{p.card_bg}; border:1px solid {p.divider}; border-radius:8px; }}"
+            f"QFrame#sidePane[dragActive=\"true\"] {{ border:2px solid {p.accent}; background:{p.accent_soft}; }}"
+        )
+        self._header.setStyleSheet(
+            f"QWidget#sideHeader {{ background:{p.secondary_surface}; border-bottom:1px solid {p.divider};"
+            "border-top-left-radius:8px; border-top-right-radius:8px; }"
+        )
+        self.badge.setStyleSheet(
+            f"background:{p.accent if self.side == 'left' else p.text_secondary};color:white;"
+            "border-radius:4px;font-weight:600;font-size:10pt;"
+        )
+        self.name_label.setStyleSheet(f"font-weight:600;color:{p.text};")
+        self.meta_label.setStyleSheet(f"color:{p.text_secondary};font-size:9pt;")
+        self._empty.setStyleSheet(
+            f"color:{p.text_secondary};background:{p.card_bg};padding:28px;"
+        )
+        # 保留现有提示结构，只替换浅色主题中的文字色，深色下保持可读
+        html = (
+            self._empty.text()
+            .replace("#1B1B1B", p.text)
+            .replace("#616161", p.text_secondary)
+            .replace("#757575", p.text_secondary)
+        )
+        self._empty.setText(html)
+
     def set_file(self, info: FileInfo | None) -> None:
         self._info = info
         if info is None:
@@ -115,8 +133,9 @@ class SidePane(QFrame):
         self._install_drop_proxy(widget)
 
     def set_empty_text(self, text: str) -> None:
+        p = theme.palette()
         self._empty.setText(
-            f"<div style='font-size:11pt;color:#616161;line-height:1.7;'>{text}</div>"
+            f"<div style='font-size:11pt;color:{p.text_secondary};line-height:1.7;'>{text}</div>"
         )
 
     def content(self) -> QWidget | None:
