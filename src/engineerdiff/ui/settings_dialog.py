@@ -35,7 +35,7 @@ class SettingsDialog(QDialog):
 
         tip = QLabel("设置将在下一次比较（或点击“重新比较”）时生效。默认严格比较，不忽略真实字符差异。")
         tip.setWordWrap(True)
-        tip.setStyleSheet("color:#5B6472;")
+        tip.setStyleSheet("color:#616161;")
         layout.addWidget(tip)
 
         text_group = QGroupBox("文本比较")
@@ -86,7 +86,7 @@ class SettingsDialog(QDialog):
         self.btn_clear_cache = QPushButton("清除 OCR 缓存")
         self.btn_clear_cache.setObjectName("tool")
         self.lbl_cache = QLabel("")
-        self.lbl_cache.setStyleSheet("color:#6B7280;")
+        self.lbl_cache.setStyleSheet("color:#757575;")
         cache_row = QHBoxLayout()
         cache_row.addWidget(self.btn_clear_cache)
         cache_row.addWidget(self.lbl_cache, 1)

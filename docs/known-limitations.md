@@ -1,6 +1,6 @@
-# 已知限制
+﻿# 已知限制
 
-本文档记录 EngineerDiff 1.0.0 已确认的限制与边界，帮助用户正确理解比较结果。
+本文档记录 EngineerDiff 1.0.1 已确认的限制与边界，帮助用户正确理解比较结果。
 "未支持"不代表以后不会支持；如对某项有需求，可通过项目 Issue 反馈。
 
 ---
@@ -11,8 +11,9 @@
    （ARM64 Windows 可能通过 x64 仿真运行，但未做验证）。
 2. **不提供 macOS/Linux 发行版**。Linux 仅用于打包配置的依赖收集自检，
    不作为交付产物，也不保证 Linux 下的 GUI/OCR 行为与 Windows 一致。
-3. **安装包未做代码签名**：首次运行可能触发 Windows SmartScreen 提示；请用随包
-   `sha256sums.txt` 校验安装包后决定是否运行。
+3. **安装包未做代码签名**：首次运行可能触发 Windows SmartScreen 提示或被防御软件
+   启发式拦截；这并不代表文件含恶意代码。请用随包 `sha256sums.txt` 校验后决定是否运行，
+   处理建议见 [Windows Defender 误报处理](windows-defender.md)。
 4. **默认 per-user 安装**（`%LOCALAPPDATA%\Programs\EngineerDiff`）。经命令行
    `/ALLUSERS` 可改装到 Program Files，但需要管理员权限，此模式未作为默认真实验证路径。
 5. **无自动更新/联网检查**：程序完全离线，不会检查新版本、不会上传任何数据。
@@ -161,3 +162,9 @@
    安装包附带的第三方许可证清单见 `THIRD-PARTY-NOTICES.md` 与 `LICENSES/`。
 3. OCR 模型来自 RapidOCR/PaddleOCR（Apache-2.0），模型精度/效果由上游决定，
    本软件不做精度承诺。
+
+## 5. Windows Defender / SmartScreen 误报
+
+本项目未附带代码签名证书，PyInstaller exe 与 Inno Setup 安装包可能被 Microsoft Defender
+的启发式规则误报。**根治办法是使用受信任的代码签名证书重新签名**；项目提供
+[Windows Defender 误报处理](windows-defender.md) 与可选签名脚本 `scripts/sign_release.ps1`。

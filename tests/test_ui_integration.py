@@ -167,3 +167,100 @@ def test_image_ocr_main_window(qapp, tmp_path: Path):
             assert 0 <= loc.bbox.x < page.width
             assert 0 <= loc.bbox.y < page.height
     window.close()
+
+
+@pytest.mark.gui
+def test_drag_drop_text_auto_compares(qapp, tmp_path: Path):
+    from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDragEnterEvent, QDropEvent
+    from PySide6.QtWidgets import QApplication
+
+    from engineerdiff.ui.main_window import MainWindow
+
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    a.write_text("软件版本 V1.2.3\n", encoding="utf-8")
+    b.write_text("软件版本 V1.2.4\n", encoding="utf-8")
+    window = MainWindow()
+    window.resize(1100, 700)
+    window.show()
+    window._set_file("left", str(a), auto_compare=True)
+    qapp.processEvents()
+    assert not window._busy
+    # 拖 B 到右侧空区域，松手后自动比较
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(b))])
+    enter = QDragEnterEvent(QPoint(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+    QApplication.sendEvent(window.right_pane, enter)
+    assert enter.isAccepted()
+    drop = QDropEvent(QPointF(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+    QApplication.sendEvent(window.right_pane, drop)
+    qapp.processEvents()
+    assert window._right_path == str(b)
+    assert window._busy
+    assert _wait(qapp, lambda: not window._busy)
+    assert window._result is not None and len(window._diffs) == 1
+    window.close()
+
+
+@pytest.mark.gui
+def test_drop_on_image_content_and_preview(qapp, tmp_path: Path, monkeypatch):
+    from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDragEnterEvent, QDropEvent
+    from PySide6.QtWidgets import QApplication
+
+    from engineerdiff.self_test import _make_ocr_images
+    from engineerdiff.ui.main_window import MainWindow
+
+    a, b = _make_ocr_images(tmp_path)
+    window = MainWindow()
+    window.resize(1100, 700)
+    window.show()
+    window._set_file("left", str(a), auto_compare=True)
+    qapp.processEvents()
+    # 单张图片也应立即显示预览，而不是空白
+    assert "left" in window._preview_panes
+    assert window._preview_panes["left"].image_size().width() > 0
+    window._set_file("right", str(a), auto_compare=False)
+    qapp.processEvents()
+    assert "right" in window._preview_panes
+    started = []
+    monkeypatch.setattr(window, "_start_compare", lambda: started.append(True))
+    target = window._preview_panes["left"].graphics_view().viewport()
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(b))])
+    enter = QDragEnterEvent(QPoint(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+    QApplication.sendEvent(target, enter)
+    assert enter.isAccepted(), "图片视图没有把拖拽事件转发给侧栏"
+    drop = QDropEvent(QPointF(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+    QApplication.sendEvent(target, drop)
+    qapp.processEvents()
+    assert window._left_path == str(b)
+    assert started == [True], "图片内容上的拖拽没有触发自动比较"
+    window.close()
+
+
+@pytest.mark.gui
+def test_image_mouse_wheel_zooms_directly(qapp, tmp_path: Path):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication
+
+    from engineerdiff.self_test import _make_ocr_images
+    from engineerdiff.ui.image_view import ImagePane
+
+    a, _b = _make_ocr_images(tmp_path)
+    pane = ImagePane()
+    pane.resize(700, 500)
+    pane.set_preview(str(a))
+    pane.show()
+    qapp.processEvents()
+    before = pane.zoom()
+    wheel = QWheelEvent(
+        QPointF(200, 200), QPointF(200, 200), QPoint(0, 0), QPoint(0, 120),
+        Qt.NoButton, Qt.NoModifier, Qt.ScrollUpdate, False,
+    )
+    QApplication.sendEvent(pane.graphics_view().viewport(), wheel)
+    qapp.processEvents()
+    assert pane.zoom() > before * 1.05
+    pane.close()

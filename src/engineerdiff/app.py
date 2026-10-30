@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_self_test(report)
 
     from PySide6.QtCore import QLocale, Qt
-    from PySide6.QtGui import QIcon
+    from PySide6.QtGui import QColor, QIcon, QPalette
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .ui import theme
@@ -76,8 +76,18 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationVersion(version.__version__)
     app.setStyle("Fusion")
     QLocale.setDefault(QLocale(QLocale.Language.Chinese, QLocale.Country.China))
-    app.setFont(theme.ui_font(9.5))
+    app.setFont(theme.ui_font(10.0))
     app.setStyleSheet(theme.APP_STYLESHEET)
+    try:
+        palette = app.palette()
+        palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.ACCENT))
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
+        palette.setColor(QPalette.ColorRole.Window, QColor(theme.APP_BG))
+        palette.setColor(QPalette.ColorRole.Base, QColor(theme.PANEL_BG))
+        palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#FAFAFA"))
+        app.setPalette(palette)
+    except Exception:
+        pass
     icon_path = _resource_path("engineerdiff.ico")
     if not icon_path.exists():
         icon_path = _resource_path("engineerdiff.png")

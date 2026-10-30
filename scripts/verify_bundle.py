@@ -162,6 +162,7 @@ def check_docs(c: Checker, dist: Path) -> None:
         "docs/user-guide.md",
         "docs/known-limitations.md",
         "docs/third-party-licenses.md",
+        "docs/windows-defender.md",
         "docs/screenshots/text-compare.png",
     ):
         path = dist / rel

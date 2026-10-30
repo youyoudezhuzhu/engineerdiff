@@ -1,4 +1,4 @@
-# EngineerDiff 使用说明（Windows）
+﻿# EngineerDiff 使用说明（Windows）
 
 EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异比较工具，用于快速找出两版
 定值单/装置配置文件之间的差异。支持：
@@ -28,7 +28,7 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 
 ### 2.1 安装包安装（推荐）
 
-1. 运行 `EngineerDiff-1.0.0-Setup-x64.exe`。
+1. 运行 `EngineerDiff-1.0.1-Setup-x64.exe`。
 2. 按向导完成安装。默认 **仅为当前用户安装**，安装目录为：
 
    ```text
@@ -41,17 +41,19 @@ EngineerDiff 是一个 **Windows 本地、完全离线** 的工程文件差异�
 4. 安装程序包含简体中文界面、MIT 许可页、卸载程序，以及随包的使用说明、已知限制和
    第三方许可证（安装目录下 `docs\`、`LICENSES\`、`THIRD-PARTY-NOTICES.md`）。
 
-> 注意：安装包未做代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”。
-> 请核对 `sha256sums.txt` 中的 SHA-256 后再选择“仍要运行”。校验方法（PowerShell）：
+> 注意：安装包未做代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，
+> 个别电脑上 Microsoft Defender 也可能启发式拦截。请核对 `sha256sums.txt` 中的
+> SHA-256 后再选择“仍要运行”；误报处理见
+> [Windows Defender 误报处理](windows-defender.md)。校验方法（PowerShell）：
 >
 > ```powershell
-> Get-FileHash .\EngineerDiff-1.0.0-Setup-x64.exe -Algorithm SHA256
+> Get-FileHash .\EngineerDiff-1.0.1-Setup-x64.exe -Algorithm SHA256
 > ```
 
 **静默安装**（批处理/内网分发，Inno Setup 标准参数）：
 
 ```bat
-EngineerDiff-1.0.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+EngineerDiff-1.0.1-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 需要为所有用户安装时，可由管理员执行 `/ALLUSERS`（此模式会写入
@@ -74,7 +76,7 @@ EngineerDiff-1.0.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 ### 2.3 便携版（免安装）
 
-将 `EngineerDiff-1.0.0-portable-win64.zip` 解压到任意可写目录后，直接运行
+将 `EngineerDiff-1.0.1-portable-win64.zip` 解压到任意可写目录后，直接运行
 `EngineerDiff.exe`。**必须保留解压后的完整目录结构**（`EngineerDiff.exe` 与
 `_internal\` 目录不可分开移动/删除，OCR 模型与 Qt 插件都在其中）。
 
@@ -86,9 +88,11 @@ EngineerDiff-1.0.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 2. 在顶部选择左右两个文件：
    - 点击 **“选择 A…”** 选择基准文件（旧版/参考版）；
    - 点击 **“选择 B…”** 选择待比较文件（新版）；
-   - 也可以把文件直接**拖到**对应一侧的窗口区域；
+   - 也可以把文件直接**拖到**对应一侧的窗口区域；**松手即自动加载并比较**，无需再点按钮；
+   - 图片拖入后会立即显示原图预览，再在后台执行 OCR；
+   - 已经显示比较结果时，仍可把新的文件拖到任一侧替换并自动重新比较；
    - 或复制文件/截图后按 **Ctrl+V** 粘贴到当前焦点一侧（支持剪贴板图片）。
-3. 点击 **“开始比较”**（或按 **Ctrl+Enter**）。
+3. 如需重新比较，可点击 **“开始比较/重新比较”**（或按 **Ctrl+Enter**）。
 4. 比较完成后，状态栏显示差异数量与耗时；使用 **F7 / F8**（或工具栏“上一处/下一处”）
    在差异之间跳转，当前差异会自动滚动/缩放到可见位置。
 5. 需要改比较规则时点击 **“设置”**（详见第 8 节），保存后点击“重新比较”生效。
@@ -184,7 +188,9 @@ EngineerDiff-1.0.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 ### 7.2 操作
 
-- **适应窗口 / 原始尺寸 / + / −**：缩放两侧图片；也可用 **Ctrl+滚轮** 缩放、拖动平移。
+- **适应窗口 / 原始尺寸 / + / −**：缩放两侧图片；
+- **直接滚动鼠标滚轮即可缩放**图片（以鼠标位置为中心）；**Shift+滚轮** 横向平移，
+  **Ctrl+滚轮** 也可缩放；按住鼠标左键拖动平移。
 - “同步滚动 / 同步缩放”开启时（默认），两侧图片一起缩放、滚动，便于对照同一区域。
 - **“OCR 文字框”**：显示全部 OCR 文字框与置信度，便于核对 OCR 是否识别正确。
 - **OCR 校对…**：打开校对对话框，可以：
@@ -238,9 +244,11 @@ EngineerDiff-1.0.0-Setup-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 | `F7` | 上一处差异 |
 | `F8` | 下一处差异 |
 | `Ctrl+V` | 把剪贴板中的文件/截图粘贴到当前焦点一侧 |
-| `Ctrl+滚轮` | 图片视图缩放（图片比较时） |
+| `鼠标滚轮` | 图片视图直接缩放（以鼠标位置为中心） |
+| `Shift+滚轮` | 图片视图横向平移 |
+| `Ctrl+滚轮` | 图片视图缩放（与直接滚轮相同） |
 
-文件也可直接拖放到左侧或右侧区域。
+文件也可直接拖放到左侧或右侧区域；松手后自动加载并比较。
 
 ---
 

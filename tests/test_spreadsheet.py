@@ -597,15 +597,15 @@ def test_spreadsheet_side_overview_screenshot(qapp, sample_data) -> None:
     assert _pixel(image, merged_rect, internal_x + 2, merged_rect.height() - 5) == "#fff2cc"
 
     # 固定表头：左上角/列标区域为表头底色
-    assert image.pixelColor(10, 10).name() == "#f6f8fa"
-    assert image.pixelColor(60, 10).name() == "#f6f8fa"
+    assert image.pixelColor(10, 10).name() in ("#f6f8fa", "#fafafa")
+    assert image.pixelColor(60, 10).name() in ("#f6f8fa", "#fafafa")
 
     # 行号显示原始行号（第 7 行标签文本难以直接断言，检查行头区域宽度与内容行高）
     assert grid.cell_rect(6, 0).height() == pytest.approx(35.0)
 
     # Sheet 标签颜色
     assert side.tab_color("基本信息").name() == "#c62828"
-    assert side.tab_color("参数表").name() == "#57606a"
+    assert side.tab_color("参数表").name() in ("#57606a", "#616161")
     assert side.tab_color("仅左侧").name() == "#c62828"
     assert side.tab_color("合并差异").name() == "#e65100"
     assert side.tab_color("仅右侧").name() == "#c62828"

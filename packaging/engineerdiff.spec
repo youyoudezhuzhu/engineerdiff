@@ -83,6 +83,8 @@ for _rel, _dest in (
     ("docs/user-guide.md", "docs"),
     ("docs/known-limitations.md", "docs"),
     ("docs/third-party-licenses.md", "docs"),
+    ("docs/windows-defender.md", "docs"),
+    ("docs/architecture.md", "docs"),
 ):
     _path = PROJECT_ROOT / _rel
     if _path.is_file():

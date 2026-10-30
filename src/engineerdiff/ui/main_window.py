@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QImage, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -66,6 +66,7 @@ class MainWindow(QMainWindow):
         self._right_path = ""
         self._last_focus = "right"
         self._worker: CompareWorker | None = None
+        self._pending_drop: tuple[str, str, bool] | None = None
         self._result: ComparisonResult | None = None
         self._mode: CompareMode | None = None
         self._view = "text"
@@ -78,6 +79,7 @@ class MainWindow(QMainWindow):
         self._text_views: dict[str, TextView] = {}
         self._sheet_sides: dict[str, object] = {}
         self._image_panes: dict[str, object] = {}
+        self._preview_panes: dict[str, object] = {}
         self._image_sync_ready = False
         self._csv_stacks: dict[str, QStackedWidget] = {}
         self._temp_dir = tempfile.mkdtemp(prefix="engineerdiff-paste-")
@@ -99,7 +101,7 @@ class MainWindow(QMainWindow):
         self.file_panel = QFrame()
         self.file_panel.setObjectName("filePanel")
         self.file_panel.setStyleSheet(
-            "QFrame#filePanel { background:#FFFFFF; border:1px solid #D8DEE6; border-radius:6px; }"
+            "QFrame#filePanel { background:#FFFFFF; border:1px solid #E0E0E0; border-radius:10px; }"
         )
         fp = QVBoxLayout(self.file_panel)
         fp.setContentsMargins(8, 7, 8, 7)
@@ -119,14 +121,14 @@ class MainWindow(QMainWindow):
         self.btn_compare.setMinimumWidth(110)
         self.btn_settings = self._tool_button("设置", "比较设置")
 
-        row1.addWidget(self._field_label("A", "#2563EB"))
+        row1.addWidget(self._field_label("A", "#0067C0"))
         row1.addWidget(self.left_edit, 1)
         row1.addWidget(self.btn_pick_left)
         row1.addWidget(self.btn_reload_left)
         row1.addSpacing(4)
         row1.addWidget(self.btn_swap)
         row1.addSpacing(4)
-        row1.addWidget(self._field_label("B", "#6B7280"))
+        row1.addWidget(self._field_label("B", "#8A8A8A"))
         row1.addWidget(self.right_edit, 1)
         row1.addWidget(self.btn_pick_right)
         row1.addWidget(self.btn_reload_right)
@@ -143,7 +145,7 @@ class MainWindow(QMainWindow):
         self.lbl_index = QLabel("0 / 0")
         self.lbl_index.setMinimumWidth(64)
         self.lbl_index.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_index.setStyleSheet("font-weight:600;color:#1F2328;")
+        self.lbl_index.setStyleSheet("font-weight:600;color:#1B1B1B;")
         self.cb_sync = QCheckBox("同步滚动")
         self.cb_sync.setChecked(self._settings.sync_scroll)
         self.cb_only = QCheckBox("仅显示差异")
@@ -190,14 +192,14 @@ class MainWindow(QMainWindow):
         it = QHBoxLayout(self.image_tools)
         it.setContentsMargins(0, 0, 0, 0)
         it.setSpacing(5)
-        self.btn_fit = self._tool_button("适应窗口", "两侧图片适应窗口")
-        self.btn_actual = self._tool_button("原始尺寸", "两侧图片按 100% 显示")
-        self.btn_zoom_out = self._tool_button("−", "缩小图片")
-        self.btn_zoom_in = self._tool_button("+", "放大图片")
+        self.btn_fit = self._tool_button("适应窗口", "两侧图片适应窗口；鼠标滚轮直接缩放，Shift+滚轮横向平移")
+        self.btn_actual = self._tool_button("原始尺寸", "两侧图片按 100% 显示（滚轮可缩放）")
+        self.btn_zoom_out = self._tool_button("−", "缩小图片（也可直接滚动鼠标滚轮）")
+        self.btn_zoom_in = self._tool_button("+", "放大图片（也可直接滚动鼠标滚轮）")
         self.lbl_zoom = QLabel("100%")
         self.lbl_zoom.setMinimumWidth(72)
         self.lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_zoom.setStyleSheet("color:#4B5563;")
+        self.lbl_zoom.setStyleSheet("color:#616161;")
         self.cb_boxes = QCheckBox("OCR 文字框")
         self.cb_boxes.setToolTip("显示全部 OCR 文字框与置信度，便于人工核对")
         self.btn_ocr_fix = self._tool_button("OCR 校对…", "查看/修正 OCR 结果，或手动指定文字对应关系")
@@ -216,9 +218,9 @@ class MainWindow(QMainWindow):
         # ---------- 警告条 ----------
         self.warning_bar = QFrame()
         self.warning_bar.setStyleSheet(
-            "QFrame { background:#FFF8E6; border:1px solid #F0C36D; border-radius:5px; }"
-            "QLabel { color:#7A4A00; border:none; background:transparent; }"
-            "QPushButton { background:transparent;border:none;color:#7A4A00;text-decoration:underline; }"
+            "QFrame { background:#FFF4CE; border:1px solid #F2D58A; border-radius:6px; }"
+            "QLabel { color:#5C4300; border:none; background:transparent; }"
+            "QPushButton { background:transparent;border:none;color:#005A9E;text-decoration:underline; }"
         )
         wb = QHBoxLayout(self.warning_bar)
         wb.setContentsMargins(10, 4, 8, 4)
@@ -251,12 +253,12 @@ class MainWindow(QMainWindow):
         self.lbl_type = QLabel("未选择文件")
         self.lbl_type.setMinimumWidth(90)
         self.lbl_state = QLabel("就绪：选择左右文件后点击“开始比较”")
-        self.lbl_state.setStyleSheet("color:#374151;")
+        self.lbl_state.setStyleSheet("color:#424242;")
         self.lbl_state.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.lbl_state.setMinimumWidth(0)
         self.lbl_state.setToolTip("比较状态/当前差异")
         self.lbl_diff = QLabel("差异 0 处")
-        self.lbl_diff.setStyleSheet("font-weight:600;color:#374151;")
+        self.lbl_diff.setStyleSheet("font-weight:600;color:#424242;")
         self.lbl_ocr = QLabel("")
         self.lbl_ocr.setMaximumWidth(220)
         self.progress = QProgressBar()
@@ -268,7 +270,7 @@ class MainWindow(QMainWindow):
         self.btn_cancel_worker.setObjectName("tool")
         self.btn_cancel_worker.setVisible(False)
         self.lbl_warn_count = QLabel("")
-        self.lbl_warn_count.setStyleSheet("color:#8A5A00;")
+        self.lbl_warn_count.setStyleSheet("color:#9D5D00;")
         status.addWidget(self.lbl_type)
         status.addWidget(self.lbl_state, 1)
         status.addPermanentWidget(self.progress)
@@ -302,8 +304,8 @@ class MainWindow(QMainWindow):
         self.btn_sheet_zoom_reset.clicked.connect(lambda: self._sheet_zoom_action(0))
         self.btn_warning.clicked.connect(self._show_warnings)
         self.btn_cancel_worker.clicked.connect(self._cancel_worker)
-        self.left_pane.file_dropped.connect(lambda p: self._set_file("left", p))
-        self.right_pane.file_dropped.connect(lambda p: self._set_file("right", p))
+        self.left_pane.file_dropped.connect(lambda p: self._set_file("left", p, auto_compare=True))
+        self.right_pane.file_dropped.connect(lambda p: self._set_file("right", p, auto_compare=True))
         self.left_pane.clicked.connect(lambda _s: self._set_focus_side("left"))
         self.right_pane.clicked.connect(lambda _s: self._set_focus_side("right"))
 
@@ -343,7 +345,7 @@ class MainWindow(QMainWindow):
     def _vsep() -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.VLine)
-        f.setStyleSheet("color:#D8DEE6;")
+        f.setStyleSheet("color:#E0E0E0;")
         f.setFixedHeight(18)
         return f
 
@@ -441,11 +443,15 @@ class MainWindow(QMainWindow):
         start_dir = str(Path(self._left_path or self._right_path or Path.home()))
         path, _ = QFileDialog.getOpenFileName(self, "选择文件", start_dir, self._filter_for_other(side))
         if path:
-            self._set_file(side, path)
+            self._set_file(side, path, auto_compare=True)
 
     def _set_file(self, side: str, path: str, auto_compare: bool = False) -> None:
         if self._busy:
-            self._send_toast("正在比较，请等待完成或取消后再更换文件。")
+            # 允许在 OCR/比较过程中直接改拖文件：记录最后一次拖入，取消当前任务，
+            # 等线程安全结束后立即应用新文件并重新比较。
+            self._pending_drop = (side, path, auto_compare)
+            self._send_toast("正在切换文件，请稍候…")
+            self._cancel_worker()
             return
         try:
             info = classify(path)
@@ -458,12 +464,14 @@ class MainWindow(QMainWindow):
         if side == "left":
             self._left_path = info.path
             self.left_edit.setText(info.path)
+            self.left_edit.setCursorPosition(0)
             self.left_edit.setToolTip(info.path)
             self.left_pane.set_file(info)
             self.left_pane.set_content(None)
         else:
             self._right_path = info.path
             self.right_edit.setText(info.path)
+            self.right_edit.setCursorPosition(0)
             self.right_edit.setToolTip(info.path)
             self.right_pane.set_file(info)
             self.right_pane.set_content(None)
@@ -479,10 +487,13 @@ class MainWindow(QMainWindow):
         self._update_index_label()
         self._apply_mode_controls()
         self._clear_views()
-        self.lbl_state.setText(f"已选择 {info.name}；选择另一侧文件后点击“开始比较”。")
         self._update_ui_state()
         if auto_compare and self._left_path and self._right_path:
             self._start_compare()
+        else:
+            self.lbl_state.setText(f"已选择 {info.name}；拖入另一侧文件后将自动比较。")
+            if info.kind == FileKind.IMAGE:
+                self._show_image_previews("等待另一侧图片…")
 
     def _reload_side(self, side: str) -> None:
         path = self._left_path if side == "left" else self._right_path
@@ -493,9 +504,11 @@ class MainWindow(QMainWindow):
             if side == "left":
                 self.left_pane.set_file(info)
                 self.left_edit.setText(info.path)
+                self.left_edit.setCursorPosition(0)
             else:
                 self.right_pane.set_file(info)
                 self.right_edit.setText(info.path)
+                self.right_edit.setCursorPosition(0)
             if self._left_path and self._right_path:
                 self._start_compare()
             else:
@@ -506,7 +519,9 @@ class MainWindow(QMainWindow):
     def _swap(self) -> None:
         self._left_path, self._right_path = self._right_path, self._left_path
         self.left_edit.setText(self._left_path)
+        self.left_edit.setCursorPosition(0)
         self.right_edit.setText(self._right_path)
+        self.right_edit.setCursorPosition(0)
         self.left_edit.setToolTip(self._left_path)
         self.right_edit.setToolTip(self._right_path)
         for path, pane in ((self._left_path, self.left_pane), (self._right_path, self.right_pane)):
@@ -579,6 +594,11 @@ class MainWindow(QMainWindow):
         self._warnings = []
         self._apply_mode_controls()
         self._clear_views()
+        if mode == CompareMode.IMAGE:
+            self._show_image_previews("正在准备 OCR…")
+        else:
+            self.left_pane.show_placeholder("正在读取并比较…")
+            self.right_pane.show_placeholder("正在读取并比较…")
         self._set_busy(True, f"正在准备{mode_label(mode)}…", cancellable=True)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
@@ -673,6 +693,11 @@ class MainWindow(QMainWindow):
             self._worker = None
         self.progress.setVisible(False)
         self.btn_cancel_worker.setVisible(False)
+        pending = self._pending_drop
+        self._pending_drop = None
+        if pending is not None:
+            side, path, auto_compare = pending
+            QTimer.singleShot(0, lambda: self._set_file(side, path, auto_compare))
 
     def _set_busy(self, busy: bool, message: str = "", cancellable: bool = False) -> None:
         self._busy = busy
@@ -698,10 +723,45 @@ class MainWindow(QMainWindow):
         self._text_views = {}
         self._sheet_sides = {}
         self._image_panes = {}
+        self._preview_panes = {}
         self._csv_stacks = {}
         self._diffs = []
         self._idx = -1
         self._update_index_label()
+
+    def _show_image_previews(self, status_text: str) -> None:
+        """图片 OCR 前先显示原图，拖入/开始比较后不再空白等待。"""
+        try:
+            from .image_view import ImagePane
+        except Exception:
+            return
+        self._preview_panes = {}
+        for side, path, pane in (
+            ("left", self._left_path, self.left_pane),
+            ("right", self._right_path, self.right_pane),
+        ):
+            if not path:
+                continue
+            try:
+                from ..file_loader import classify as _classify
+
+                if _classify(path).kind != FileKind.IMAGE:
+                    continue
+            except Exception:
+                continue
+            view = ImagePane()
+            view.set_preview(path)
+            pane.set_content(view)
+            self._preview_panes[side] = view
+            image = QImage(path)
+            if not image.isNull():
+                pane.set_meta(f"{image.width()} × {image.height()} px · {status_text}")
+            else:
+                pane.set_meta(status_text)
+        self._update_zoom_label()
+
+    def _active_image_panes(self) -> dict[str, object]:
+        return self._image_panes if self._image_panes else self._preview_panes
 
     def _build_views(self, result: ComparisonResult) -> None:
         self._clear_views()
@@ -1044,9 +1104,9 @@ class MainWindow(QMainWindow):
         self.lbl_state.setText(message)
         self.lbl_state.setToolTip(f"{title}{detail}")
         if diff.severity.value == "uncertain":
-            self.lbl_state.setStyleSheet("color:#8A3B00;")
+            self.lbl_state.setStyleSheet("color:#9D5D00;")
         else:
-            self.lbl_state.setStyleSheet("color:#374151;")
+            self.lbl_state.setStyleSheet("color:#424242;")
 
     @staticmethod
     def _diff_sheet_name(diff: DiffItem) -> str | None:
@@ -1138,7 +1198,7 @@ class MainWindow(QMainWindow):
 
     # ================================================================== image controls
     def _image_action(self, action: str) -> None:
-        panes = list(self._image_panes.values())
+        panes = list(self._active_image_panes().values())
         if not panes:
             return
         # 适应窗口/原始尺寸对两张不同尺寸的图分别执行；缩放按钮在“同步”开启时
@@ -1154,7 +1214,8 @@ class MainWindow(QMainWindow):
             finally:
                 self._sync_guard = False
         elif action in ("zoom_in", "zoom_out"):
-            targets = [self._image_panes.get("left")] if self.cb_sync.isChecked() else panes
+            active = self._active_image_panes()
+            targets = [active.get("left")] if self.cb_sync.isChecked() else panes
             for p in targets:
                 if p is None:
                     continue
@@ -1166,7 +1227,7 @@ class MainWindow(QMainWindow):
 
     def _update_zoom_label(self) -> None:
         try:
-            zooms = [p.zoom() for p in self._image_panes.values()]
+            zooms = [p.zoom() for p in self._active_image_panes().values()]
         except Exception:
             return
         if not zooms:

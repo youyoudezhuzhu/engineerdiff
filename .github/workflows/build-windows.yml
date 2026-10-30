@@ -194,6 +194,7 @@ jobs:
             }
           }
           if (-not (Test-Path -LiteralPath (Join-Path $installDir 'docs\user-guide.md'))) { throw '安装目录缺少 docs\user-guide.md' }
+          if (-not (Test-Path -LiteralPath (Join-Path $installDir 'docs\windows-defender.md'))) { throw '安装目录缺少 docs\windows-defender.md' }
           if (-not (Test-Path -LiteralPath (Join-Path $installDir 'docs\screenshots\text-compare.png'))) { throw '安装目录缺少 docs\screenshots 截图' }
           if (-not (Test-Path -LiteralPath (Join-Path $installDir 'LICENSES\MANIFEST.json'))) { throw '安装目录缺少 LICENSES\MANIFEST.json' }
           Write-Host "安装目录 OCR 模型：$($models.Name -join ', ')"

@@ -28,7 +28,7 @@ from ..models import DiffItem, ImageComparison, OcrPage
 COLOR_CONFIRMED = QColor(198, 40, 40)  # 红：确定差异
 COLOR_UNCERTAIN = QColor(230, 126, 34)  # 橙：不确定/需复核
 COLOR_OCR_BOX = QColor(21, 101, 192)  # 蓝：OCR 文字框
-COLOR_BG = QColor(245, 245, 245)
+COLOR_BG = QColor(243, 243, 243)
 COLOR_PLACEHOLDER = QColor(240, 240, 240)
 COLOR_PLACEHOLDER_TEXT = QColor(120, 120, 120)
 
@@ -37,7 +37,7 @@ MAX_ZOOM = 8.0
 
 
 class _GraphicsView(QGraphicsView):
-    """内部 QGraphicsView：Ctrl+滚轮缩放，其余情况正常滚动/拖动。"""
+    """内部 QGraphicsView：鼠标滚轮直接缩放，Shift+滚轮横向滚动，按住左键拖动。"""
 
     ctrl_wheel = Signal(float)
 
@@ -52,10 +52,18 @@ class _GraphicsView(QGraphicsView):
         self.setAlignment(Qt.AlignCenter)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
-        if event.modifiers() & Qt.ControlModifier:
-            delta = event.angleDelta().y()
-            if delta:
-                self.ctrl_wheel.emit(1.25 if delta > 0 else 0.8)
+        delta = event.angleDelta().y()
+        if delta:
+            if event.modifiers() & Qt.ShiftModifier:
+                # Shift+滚轮：横向平移，保留大图查看习惯
+                bar = self.horizontalScrollBar()
+                bar.setValue(bar.value() - delta)
+            else:
+                # Fluent/常见看图软件行为：鼠标滚轮直接缩放（无需 Ctrl）。
+                # 每 120 单位一格，按比例缩放；Ctrl 仍然有效，便于精细操作。
+                steps = delta / 120.0
+                factor = max(0.5, min(2.0, 1.0 + 0.15 * steps))
+                self.ctrl_wheel.emit(factor)
             event.accept()
             return
         super().wheelEvent(event)
@@ -103,6 +111,24 @@ class ImagePane(QWidget):
         self._render_placeholder("未加载图片")
 
     # ------------------------------------------------------------------ 公开接口
+    def set_preview(self, image_path: str) -> None:
+        """仅显示原图预览（不做 OCR）；用于拖入图片后、OCR 完成前的即时反馈。"""
+        self._page = None
+        self._comparison = None
+        self._show_boxes = False
+        pixmap = QPixmap(str(image_path))
+        if pixmap.isNull():
+            self._pixmap = None
+            self._image_size = QSize(0, 0)
+            self._render_placeholder("无法显示图片")
+            return
+        self._pixmap = pixmap
+        self._image_size = pixmap.size()
+        self._rebuild_scene()
+        self._fit_pending = True
+        self.fit_to_window()
+        self.setToolTip(f"{image_path}\n正在准备 OCR…")
+
     def set_comparison(
         self,
         page: OcrPage,

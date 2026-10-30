@@ -674,9 +674,10 @@ def test_image_pane_fits_after_show_not_thumbnail(qapp, tmp_path: Path):
     )
     QApplication.sendEvent(pane.graphics_view().viewport(), wheel)
     qapp.processEvents()
-    assert pane.zoom() == pytest.approx(min(8.0, base_zoom * 1.25), rel=0.03)
+    assert pane.zoom() > base_zoom
+    assert pane.zoom() == pytest.approx(min(8.0, base_zoom * 1.15), rel=0.03)
 
-    # 不按 Ctrl 的滚轮不应缩放
+    # 不按 Ctrl 的滚轮直接缩放（看图软件习惯，用户要求）
     zoom_before = pane.zoom()
     plain_wheel = QWheelEvent(
         QPointF(300, 200),
@@ -690,5 +691,5 @@ def test_image_pane_fits_after_show_not_thumbnail(qapp, tmp_path: Path):
     )
     QApplication.sendEvent(pane.graphics_view().viewport(), plain_wheel)
     qapp.processEvents()
-    assert pane.zoom() == pytest.approx(zoom_before, rel=1e-6)
+    assert pane.zoom() > zoom_before
     pane.close()

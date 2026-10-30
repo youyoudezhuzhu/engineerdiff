@@ -1,11 +1,11 @@
-# UTF-8
+﻿# UTF-8
 # EngineerDiff Windows 可执行文件版本资源。
 # 由 packaging/engineerdiff.spec 在 Windows 构建时通过 version= 参数嵌入。
 # 版本号必须与 src/engineerdiff/version.py 中的 __version__ 一致（scripts/check_spec.py 会校验）。
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 0, 1, 0),
+    prodvers=(1, 0, 1, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -21,12 +21,12 @@ VSVersionInfo(
           [
             StringStruct("CompanyName", "EngineerDiff contributors"),
             StringStruct("FileDescription", "EngineerDiff 工程文件差异比较"),
-            StringStruct("FileVersion", "1.0.0.0"),
+            StringStruct("FileVersion", "1.0.1.0"),
             StringStruct("InternalName", "EngineerDiff"),
             StringStruct("LegalCopyright", "Copyright (c) 2026 EngineerDiff contributors. MIT License."),
             StringStruct("OriginalFilename", "EngineerDiff.exe"),
             StringStruct("ProductName", "EngineerDiff"),
-            StringStruct("ProductVersion", "1.0.0"),
+            StringStruct("ProductVersion", "1.0.1"),
             StringStruct("Comments", "本地离线多格式文件差异比较工具"),
           ],
         )
