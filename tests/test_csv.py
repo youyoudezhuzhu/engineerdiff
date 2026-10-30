@@ -176,3 +176,13 @@ def test_csv_numbers_stay_text_and_differ(tmp_path: Path) -> None:
     assert len(comparison.diffs) == 1
     assert comparison.diffs[0].id == "cell:CSV:1:1"
     assert comparison.diffs[0].kind.value == "modified"
+
+
+def test_csv_crlf_inside_quoted_field_normalized(tmp_path) -> None:
+    path = tmp_path / "crlf.csv"
+    path.write_bytes(b'name,note\r\nA,"line1\r\nline2"\r\n')
+    sheet, delimiter, warnings = parse_csv(path)
+    assert delimiter == ","
+    assert sheet.cell(1, 1).display == "line1\nline2"
+    assert sheet.cell(1, 1).style.wrap is True
+    assert sheet.row_heights[1] >= 40

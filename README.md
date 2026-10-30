@@ -99,7 +99,7 @@ python -m venv .venv
 .venv/bin/pip install -e . --no-deps
 
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-.venv/bin/python -m engineerdiff --self-test            # 8 项端到端自检
+.venv/bin/python -m engineerdiff --self-test            # 7 项端到端自检
 ```
 
 测试覆盖文本字符差异、编码、忽略规则、CSV 引号/跨行、XLSX/XLS 多 Sheet/公式/合并单元格、

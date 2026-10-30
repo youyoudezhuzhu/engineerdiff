@@ -1,0 +1,23 @@
+* text=auto
+
+# 测试 CSV 固定 LF，避免 Windows checkout 的 autocrlf 改变字段内换行
+*.csv text eol=lf
+*.txt text eol=lf
+
+# PowerShell/Inno 脚本使用 CRLF 更符合 Windows 习惯
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+*.bat text eol=crlf
+
+# 二进制资产不做换行转换
+*.xls binary
+*.xlsx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.ico binary
+*.otf binary
+*.zip binary
+*.exe binary
+*.onnx binary

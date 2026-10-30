@@ -183,6 +183,10 @@ def parse_csv(path: str | Path) -> tuple[Sheet, str, list[str]]:
         cells: list[Cell] = []
         for col in range(ncols):
             field = raw_row[col] if col < len(raw_row) else ""
+            # 统一字段内换行为 LF：Windows 上 csv.reader 会保留 CRLF，同一份 CSV
+            # 在不同平台应产生一致的显示/比较结果；原始文本视图仍由 TextDiff 处理。
+            if "\r" in field:
+                field = field.replace("\r\n", "\n").replace("\r", "\n")
             if field == "":
                 cells.append(Cell())
                 continue
