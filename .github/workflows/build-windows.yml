@@ -88,13 +88,47 @@ jobs:
         id: inno
         shell: pwsh
         run: |
-          $iscc = & pwsh -NoProfile -ExecutionPolicy Bypass -File "$env:GITHUB_WORKSPACE\scripts\install_inno.ps1"
-          if ($LASTEXITCODE -ne 0 -or -not $iscc) { throw "Inno Setup 安装/探测失败（exit=$LASTEXITCODE）" }
-          "iscc=$iscc" >> $env:GITHUB_OUTPUT
+          $ErrorActionPreference = 'Stop'
+          $candidates = @(
+            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 6\ISCC.exe',
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:RUNNER_TEMP 'InnoSetup6\ISCC.exe')
+          )
+          $iscc = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            # windows-latest/windows-2022 镜像在 2025 后可能不再预装 Inno Setup；
+            # 从官方 GitHub Release 下载固定版本，安装到 runner 临时目录。
+            $url = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe'
+            $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
+            Write-Host "下载 Inno Setup：$url"
+            Invoke-WebRequest -Uri $url -OutFile $setup -UseBasicParsing -TimeoutSec 180
+            Write-Host ("安装包大小：{0}" -f (Get-Item -LiteralPath $setup).Length)
+            $target = Join-Path $env:RUNNER_TEMP 'InnoSetup6'
+            $p = Start-Process -FilePath $setup -ArgumentList @(
+              '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/ALLUSERS',"/DIR=`"$target`""
+            ) -Wait -PassThru
+            Write-Host "Inno Setup 安装退出码：$($p.ExitCode)"
+            $iscc = Join-Path $target 'ISCC.exe'
+            if (-not (Test-Path -LiteralPath $iscc)) {
+              $p2 = Start-Process -FilePath $setup -ArgumentList @(
+                '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER'
+              ) -Wait -PassThru
+              Write-Host "Inno Setup current-user 安装退出码：$($p2.ExitCode)"
+              $iscc = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+            }
+          }
+          if (-not $iscc -or -not (Test-Path -LiteralPath $iscc)) {
+            Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName | Write-Host
+            throw '无法获取 Inno Setup ISCC.exe'
+          }
           $ver = (Get-Item -LiteralPath $iscc).VersionInfo.FileVersion
           if ([int]((Get-Item -LiteralPath $iscc).VersionInfo.FileMajorPart) -lt 6) {
             throw "需要 Inno Setup 6+，当前为 $ver（$iscc）"
           }
+          "iscc=$iscc" >> $env:GITHUB_OUTPUT
           Write-Host "ISCC = $iscc（Inno Setup $ver）"
 
       - name: Build, verify bundle and create installer
