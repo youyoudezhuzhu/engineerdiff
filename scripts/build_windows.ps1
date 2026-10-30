@@ -199,7 +199,16 @@ try {
         # 不能用 FileVersion 判断版本；兼容性由实际编译验证。
         $summary.iscc = "ISCC: $IsccPath"
         Write-Host "ISCC: $IsccPath" -ForegroundColor Cyan
-        Invoke-Native $IsccPath @('/Qp', $issPath)
+        # 在 packaging 目录下运行 ISCC：Inno 的自定义语言文件使用
+        # "languages\ChineseSimplified.isl"（相对当前源目录），同时 .iss 中的
+        # ..\dist、..\release 等相对路径仍然正确。
+        Push-Location (Join-Path $root 'packaging')
+        try {
+            Invoke-Native $IsccPath @('/Qp', $issPath)
+        }
+        finally {
+            Pop-Location
+        }
 
         $installerPath = Join-Path $releaseDir "EngineerDiff-$version-Setup-x64.exe"
         if (-not (Test-Path -LiteralPath $installerPath)) {
