@@ -164,7 +164,6 @@ hiddenimports += collect_submodules("rapidocr_onnxruntime")
 hiddenimports += [
     "openpyxl.cell._writer",
     "xlrd.compdoc",
-    "charset_normalizer.md__mypyc",
 ]
 
 # ---------------------------------------------------------------------------

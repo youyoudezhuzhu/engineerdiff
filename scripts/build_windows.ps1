@@ -195,13 +195,10 @@ try {
         if (-not (Test-Path -LiteralPath $IsccPath)) {
             throw "ISCC 路径不存在：$IsccPath"
         }
-        $isccVersion = (Get-Item -LiteralPath $IsccPath).VersionInfo.FileVersion
-        $isccMajor = [int]((Get-Item -LiteralPath $IsccPath).VersionInfo.FileMajorPart)
-        if ($isccMajor -lt 6) {
-            throw "需要 Inno Setup 6+，当前 ISCC 版本为 $isccVersion（$IsccPath）"
-        }
-        $summary.iscc = "Inno Setup $isccVersion ($IsccPath)"
-        Write-Host "ISCC: $IsccPath（Inno Setup $isccVersion）" -ForegroundColor Cyan
+        # ISCC.exe 的版本资源为 0.0.0.0（Inno Setup 未写入 FileVersion），
+        # 不能用 FileVersion 判断版本；兼容性由实际编译验证。
+        $summary.iscc = "ISCC: $IsccPath"
+        Write-Host "ISCC: $IsccPath" -ForegroundColor Cyan
         Invoke-Native $IsccPath @('/Qp', $issPath)
 
         $installerPath = Join-Path $releaseDir "EngineerDiff-$version-Setup-x64.exe"
