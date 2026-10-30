@@ -87,6 +87,9 @@ for _rel, _dest in (
     _path = PROJECT_ROOT / _rel
     if _path.is_file():
         datas.append((str(_path), _dest))
+_screenshots = PROJECT_ROOT / "docs" / "screenshots"
+if _screenshots.is_dir():
+    datas.append((str(_screenshots), "docs/screenshots"))
 
 # ---------------------------------------------------------------------------
 # 二进制依赖
@@ -119,6 +122,37 @@ try:
             binaries.append((str(_plugin), f"{_qt_rel_dir}/plugins/{_plugin_type}"))
 except ImportError as exc:  # pragma: no cover - PySide6 是硬依赖
     raise SystemExit(f"ERROR: 构建环境缺少 PySide6：{exc}") from exc
+
+# 4) Windows：显式收集 Microsoft VC++ 运行库 DLL。
+#    ONNX Runtime / OpenCV 的 Windows wheel 依赖 msvcp140.dll、vcruntime140.dll、
+#    vcruntime140_1.dll、concrt140.dll 等；干净的 Windows 可能没有安装 VC++ 运行库。
+#    按 Microsoft Visual C++ Redistributable 的再分发条款，可随应用分发这些 DLL
+#    （见 docs/third-party-licenses.md）。缺失时让构建直接失败，避免产出“装完打不开”
+#    的安装包。构建脚本还会额外复制一份到 dist 根目录，双保险。
+if sys.platform == "win32":
+    _system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    _vc_globs = (
+        "msvcp140*.dll",
+        "vcruntime140*.dll",
+        "concrt140.dll",
+        "vcomp140.dll",
+    )
+    _vc_found: set[str] = set()
+    for _pattern in _vc_globs:
+        for _dll in sorted(_system32.glob(_pattern)):
+            # 排除调试版（*d.dll）以及与 ARM64 无关的同名文件
+            if _dll.name.lower().endswith("d.dll"):
+                continue
+            binaries.append((str(_dll), "."))
+            _vc_found.add(_dll.name.lower())
+    _vc_required = {"msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"}
+    _vc_missing = sorted(_vc_required - _vc_found)
+    if _vc_missing:
+        raise SystemExit(
+            "ERROR: 构建机 System32 缺少 VC++ 运行库 DLL："
+            f"{_vc_missing}；请先安装 Microsoft Visual C++ 2015-2022 Redistributable (x64)。"
+        )
+    print(f"INFO: 已收集 VC++ 运行库 DLL：{sorted(_vc_found)}")
 
 # ---------------------------------------------------------------------------
 # 隐藏导入

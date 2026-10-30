@@ -163,13 +163,15 @@ def _fill_basic_sheet(ws, *, version: str, rated_voltage) -> None:
         _apply_style(ws, label_coord, styles["header"])
         ws[value_coord] = value
         _apply_style(ws, value_coord, styles["body"])
-    ws["B2"].font = ws["B2"].font.copy(italic=True)
-    ws["B2"].alignment = ws["B2"].alignment.copy(horizontal="left")
+    from openpyxl.styles import Alignment, Font
+
+    ws["B2"].font = Font(size=11, italic=True)
+    ws["B2"].alignment = Alignment(horizontal="left", vertical="center")
     ws["B4"].number_format = "0.00"
     ws["B5"].number_format = "0.00"
-    ws["B5"].alignment = ws["B5"].alignment.copy(horizontal="right")
+    ws["B5"].alignment = Alignment(horizontal="right", vertical="center")
     ws["B6"].number_format = "yyyy-mm-dd"
-    ws["B7"].font = ws["B7"].font.copy(bold=True)
+    ws["B7"].font = Font(size=11, bold=True)
     ws.merge_cells("B7:C7")
     _apply_style(ws, "C7", styles["body"])
     _apply_style(ws, "C2", styles["notice"])
@@ -204,6 +206,24 @@ def _fill_params_sheet(ws) -> None:
     ws.row_dimensions[6].height = 28
 
 
+def _fill_merge_sheet(ws, *, merge_cols: int) -> None:
+    """合并区域不一致：左侧 A1:B1，右侧 A1:C1（锚点文本相同）。"""
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    styles = _styles()
+    ws["A1"] = "合并区域"
+    ws["A1"].font = Font(size=12, bold=True)
+    ws["A1"].fill = PatternFill("solid", fgColor="E2EFDA")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=merge_cols)
+    ws["A2"] = "第二行"
+    ws["B2"] = 1.0
+    ws["A2"].font = styles["body"][0]
+    ws["B2"].font = styles["body"][0]
+    _set_widths(ws, {1: 20, 2: 18, 3: 16, 4: 12})
+    ws.row_dimensions[1].height = 26
+
+
 def _fill_only_sheet(ws, *, side_label: str) -> None:
     styles = _styles()
     _base_sheet(ws, title=side_label)
@@ -228,6 +248,8 @@ def generate_xlsx_fixtures(dest: Path = FIXTURES_DIR) -> list[Path]:
     _fill_params_sheet(left_params)
     left_only = left.create_sheet("仅左侧")
     _fill_only_sheet(left_only, side_label="仅左侧工作表的标题")
+    left_merge = left.create_sheet("合并差异")
+    _fill_merge_sheet(left_merge, merge_cols=2)
     left.save(left_path)
 
     right = Workbook()
@@ -238,13 +260,15 @@ def generate_xlsx_fixtures(dest: Path = FIXTURES_DIR) -> list[Path]:
     _fill_basic_sheet(right_basic, version="V1.0.1", rated_voltage="220")
     right_only = right.create_sheet("仅右侧")
     _fill_only_sheet(right_only, side_label="仅右侧工作表的标题")
+    right_merge = right.create_sheet("合并差异")
+    _fill_merge_sheet(right_merge, merge_cols=3)
     right.save(right_path)
     return [left_path, right_path]
 
 
 def _fill_formula_sheet(ws, *, formula_for_b2: str) -> None:
     styles = _styles()
-    _base_sheet(ws, title="公式与缓存值")
+    # 注意：不要合并 A1:D1，B1 是公式单元格，合并会把它变成非锚点被清空。
     ws["A1"] = 2
     ws["A2"] = 3
     ws["B1"] = "=A1+A2"
@@ -253,6 +277,7 @@ def _fill_formula_sheet(ws, *, formula_for_b2: str) -> None:
     ws["B4"] = '=IF(A1>1,"是","否")'
     ws["B5"] = "=A1/A2"
     ws["B5"].number_format = "0.00"
+    ws["B2"].number_format = "0.00"
     for row in range(1, 6):
         for col in ("A", "B"):
             cell = ws[f"{col}{row}"]
@@ -271,6 +296,7 @@ def generate_formula_fixtures(dest: Path = FIXTURES_DIR) -> list[Path]:
     right_path = dest / "formula_right.xlsx"
 
     left = Workbook()
+    left.active.title = "公式与缓存值"
     _fill_formula_sheet(left.active, formula_for_b2="=A1*A2")
     left.save(left_path)
     # 左侧 B3 故意不注入缓存值，模拟“未在 Excel 中计算过”的公式。
@@ -280,6 +306,7 @@ def generate_formula_fixtures(dest: Path = FIXTURES_DIR) -> list[Path]:
     )
 
     right = Workbook()
+    right.active.title = "公式与缓存值"
     _fill_formula_sheet(right.active, formula_for_b2="=A1*A2*1")
     right.save(right_path)
     _inject_cached_values(

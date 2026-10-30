@@ -1,0 +1,148 @@
+"""Lead 负责的主窗口集成测试：CSV、Excel、图片 OCR 与交互。"""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import pytest
+
+
+def _wait(app, predicate, timeout=30.0):
+    start = time.time()
+    while time.time() - start < timeout:
+        app.processEvents()
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def _make_xlsx(path: Path, version: str, reverse: bool, only_left: bool) -> None:
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "软件版本"
+    ws["A1"] = "装置"
+    ws["B1"] = "版本"
+    ws["A2"] = "装置一"
+    ws["B2"] = version
+    ws2 = wb.create_sheet("保护定值")
+    ws2["A1"] = "定值项"
+    ws2["B1"] = "值"
+    ws2["A2"] = "过流 I 段"
+    ws2["B2"] = 1.50
+    ws2["A3"] = "过流 II 段"
+    ws2["B3"] = 2.00
+    if only_left:
+        ws2["B3"] = 2.50
+        wb.create_sheet("仅左侧")["A1"] = "left only"
+    if reverse:
+        wb.move_sheet("保护定值", offset=-1)
+    wb.save(path)
+
+
+@pytest.mark.gui
+def test_csv_table_text_toggle(qapp, tmp_path: Path):
+    from engineerdiff.ui.main_window import MainWindow
+
+    a = tmp_path / "a.csv"
+    b = tmp_path / "b.csv"
+    a.write_text('设备,数值,备注\n"装置,一",1.50,"含,逗号"\n装置二,2.00,"多行\n字段"\n', encoding="utf-8")
+    b.write_text('设备,数值,备注\n"装置,一",1.80,"含,逗号"\n装置二,2.00,"多行\n字段"\n', encoding="utf-8")
+    window = MainWindow()
+    window.show()
+    window._set_file("left", str(a))
+    window._set_file("right", str(b))
+    window._start_compare()
+    assert _wait(qapp, lambda: not window._busy)
+    qapp.processEvents()
+    assert window._mode.value == "csv"
+    assert window._view == "table"
+    assert len(window._diffs) == 1
+    assert window._sheet_sides["left"].grid().sheet().cell(2, 2).display == "多行\n字段"
+    assert window._result.csv.left.row_heights[2] >= 40
+    window.combo_view.setCurrentIndex(1)  # 文本视图
+    qapp.processEvents()
+    assert window._view == "text"
+    assert window._diffs and window._diffs[0].id.startswith("text:")
+    window.combo_view.setCurrentIndex(0)
+    qapp.processEvents()
+    assert window._diffs[0].group == "cell"
+    window.close()
+
+
+@pytest.mark.gui
+def test_excel_sheet_sync_and_placeholder(qapp, tmp_path: Path):
+    from engineerdiff.ui.main_window import MainWindow
+
+    a = tmp_path / "a.xlsx"
+    b = tmp_path / "b.xlsx"
+    _make_xlsx(a, "V1.2.3", False, True)
+    _make_xlsx(b, "V1.2.4", True, False)
+    window = MainWindow()
+    window.show()
+    window._set_file("left", str(a))
+    window._set_file("right", str(b))
+    window._start_compare()
+    assert _wait(qapp, lambda: not window._busy)
+    qapp.processEvents()
+    assert window._mode.value == "excel"
+    # Sheet 顺序不同但按名称配对；内容相同的工作表不标红
+    assert window._result.workbook.sheet_by_name("保护定值").status.value == "different"
+    assert window._result.workbook.sheet_by_name("软件版本").status.value == "different"
+    # 点击右侧“保护定值”，左侧同步
+    window._on_sheet_selected("right", "保护定值")
+    qapp.processEvents()
+    assert window._sheet_sides["left"].current_sheet() == "保护定值"
+    # 导航到仅左侧存在的 Sheet，右侧显示占位
+    for i, diff in enumerate(window._diffs):
+        if diff.kind.value == "only_left":
+            window._show_diff(i)
+            qapp.processEvents()
+            assert window._sheet_sides["right"].is_placeholder_visible()
+            assert window._sheet_sides["right"].placeholder_text() == "无对应工作表"
+            break
+    else:
+        pytest.fail("未检出仅左侧工作表差异")
+    window.close()
+
+
+@pytest.mark.gui
+@pytest.mark.ocr
+def test_image_ocr_main_window(qapp, tmp_path: Path):
+    from engineerdiff.self_test import _make_ocr_images
+    from engineerdiff.ui.main_window import MainWindow
+
+    a, b = _make_ocr_images(tmp_path)
+    window = MainWindow()
+    window.resize(1280, 820)
+    window.show()
+    window._set_file("left", str(a))
+    window._set_file("right", str(b))
+    window._start_compare()
+    assert _wait(qapp, lambda: not window._busy, timeout=120)
+    qapp.processEvents()
+    assert window._mode.value == "image"
+    assert len(window._diffs) >= 1
+    left = window._image_panes["left"]
+    right = window._image_panes["right"]
+    # 适应窗口不能显示成缩略图
+    assert left.zoom() > 0.2, f"左侧 zoom={left.zoom()}，可能退化为缩略图"
+    assert right.zoom() > 0.2
+    # 初次显示先让两侧各自“适应窗口”，之后才启用同步缩放
+    assert _wait(qapp, lambda: window._image_sync_ready, timeout=3)
+    before = left.zoom()
+    left.zoom_in()
+    qapp.processEvents()
+    # 同步缩放开启时另一侧应跟随到与操作侧相同比例
+    assert left.zoom() > before
+    assert right.zoom() == pytest.approx(left.zoom(), rel=1e-3)
+    # 差异高亮坐标在原图范围内
+    d = window._diffs[0]
+    for loc, page in ((d.left, left.page()), (d.right, right.page())):
+        if loc is not None and loc.bbox is not None:
+            assert 0 <= loc.bbox.x < page.width
+            assert 0 <= loc.bbox.y < page.height
+    window.close()

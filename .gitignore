@@ -13,3 +13,5 @@ tests/.tmp/
 tests/fixtures/generated/
 *.log
 release/
+self-test-report.json
+installed-self-test.json

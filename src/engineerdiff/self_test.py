@@ -172,18 +172,32 @@ def run_self_test(report_path: str | Path = REPORT_NAME) -> int:
                     assert d.left.bbox is not None and d.left.bbox.w > 0, "左侧差异缺少坐标"
                 if d.right is not None:
                     assert d.right.bbox is not None and d.right.bbox.w > 0, "右侧差异缺少坐标"
-            for box in img.left.boxes + img.right.boxes:
-                assert 0 <= box.bbox.x < img.left.width + img.right.width
+            for box in img.left.boxes:
+                assert 0 <= box.bbox.x < img.left.width and 0 <= box.bbox.y < img.left.height
+            for box in img.right.boxes:
+                assert 0 <= box.bbox.x < img.right.width and 0 <= box.bbox.y < img.right.height
             return f"OCR 识别 {len(img.left.boxes)}+{len(img.right.boxes)} 块，检出 {len(img.diffs)} 处图片差异"
 
         def check_gui_imports() -> str:
-            from PySide6.QtWidgets import QApplication  # noqa: F401
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PySide6.QtWidgets import QApplication
 
-            from .ui.main_window import MainWindow  # noqa: F401
+            from .ui.main_window import MainWindow
             from .ui.image_view import ImagePane  # noqa: F401
             from .ui.spreadsheet_side import SpreadsheetSide  # noqa: F401
 
-            return "PySide6、主窗口与各渲染组件可导入"
+            app = QApplication.instance() or QApplication([])
+            window = MainWindow()
+            window.resize(1100, 720)
+            window.show()
+            app.processEvents()
+            pixmap = window.grab()
+            assert not pixmap.isNull() and pixmap.width() >= 900, "主窗口无法渲染"
+            shot = tmp_path / "window-smoke.png"
+            pixmap.save(str(shot), "PNG")
+            window.close()
+            app.processEvents()
+            return f"PySide6/Qt 插件加载、主窗口渲染正常（截图 {shot.name} {pixmap.width()}×{pixmap.height()}）"
 
         def check_file_loaders() -> str:
             import xlrd  # noqa: F401

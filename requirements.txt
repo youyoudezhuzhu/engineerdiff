@@ -1,14 +1,16 @@
-# EngineerDiff 运行时依赖（与 pyproject.toml [project].dependencies 保持一致）
+# EngineerDiff 运行时依赖（与 pyproject.toml [project].dependencies 对齐）
 #
-# 说明：
-# - 关键版本锁定以 Windows x64 / Python 3.11 为准，便于 CI 与安装包可复现。
-# - rapidocr-onnxruntime 的 OCR 模型（3 个 .onnx）与 config.yaml 随 wheel 分发，
-#   PyInstaller spec 会显式收集并在构建后校验，运行时禁止联网下载模型。
-# - 不在此文件固定 Linux/Windows 专属传递依赖；传递依赖由 pip 解析。
+# 关键版本按 Windows x64 / Python 3.11 锁定，便于 CI 与安装包可复现：
+#   - 单一 OpenCV 发行包：只装 opencv-python==4.10.0.84（rapidocr 的传递依赖也是
+#     它）。不要再装 opencv-python-headless，否则两个发行包互相覆盖 cv2 文件。
+#   - Pillow==11.1.0 与当前 .venv / OCR、图标生成实测一致。
+#   - rapidocr-onnxruntime 的 3 个 ONNX 模型与 config.yaml 随 wheel 分发；
+#     PyInstaller spec 显式收集并在构建后校验，运行时禁止联网下载模型。
+#   - 不固定 Linux/Windows 专属传递依赖；传递依赖由 pip 解析。
 PySide6==6.8.1
-Pillow>=10.4,<12
+Pillow==11.1.0
 numpy>=1.26,<2.3
-opencv-python-headless==4.10.0.84
+opencv-python==4.10.0.84
 rapidocr-onnxruntime==1.4.4
 onnxruntime==1.20.1
 openpyxl>=3.1.5,<3.2

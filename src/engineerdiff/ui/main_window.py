@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QStatusBar,
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow):
         self._text_views: dict[str, TextView] = {}
         self._sheet_sides: dict[str, object] = {}
         self._image_panes: dict[str, object] = {}
+        self._image_sync_ready = False
         self._csv_stacks: dict[str, QStackedWidget] = {}
         self._temp_dir = tempfile.mkdtemp(prefix="engineerdiff-paste-")
 
@@ -173,7 +175,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out = self._tool_button("−", "缩小图片")
         self.btn_zoom_in = self._tool_button("+", "放大图片")
         self.lbl_zoom = QLabel("100%")
-        self.lbl_zoom.setMinimumWidth(42)
+        self.lbl_zoom.setMinimumWidth(72)
         self.lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_zoom.setStyleSheet("color:#4B5563;")
         self.cb_boxes = QCheckBox("OCR 文字框")
@@ -227,11 +229,16 @@ class MainWindow(QMainWindow):
         status.setSizeGripEnabled(True)
         self.setStatusBar(status)
         self.lbl_type = QLabel("未选择文件")
+        self.lbl_type.setMinimumWidth(90)
         self.lbl_state = QLabel("就绪：选择左右文件后点击“开始比较”")
         self.lbl_state.setStyleSheet("color:#374151;")
+        self.lbl_state.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.lbl_state.setMinimumWidth(0)
+        self.lbl_state.setToolTip("比较状态/当前差异")
         self.lbl_diff = QLabel("差异 0 处")
         self.lbl_diff.setStyleSheet("font-weight:600;color:#374151;")
         self.lbl_ocr = QLabel("")
+        self.lbl_ocr.setMaximumWidth(220)
         self.progress = QProgressBar()
         self.progress.setFixedWidth(160)
         self.progress.setRange(0, 100)
@@ -365,6 +372,11 @@ class MainWindow(QMainWindow):
             self.cb_sync.setChecked(self._settings.sync_scroll)
             self.cb_only.setChecked(self._settings.only_diffs)
             self._save_settings()
+            self.cb_boxes.blockSignals(True)
+            self.cb_boxes.setChecked(self._settings.image.show_boxes)
+            self.cb_boxes.blockSignals(False)
+            for pane in self._image_panes.values():
+                pane.set_show_boxes(self._settings.image.show_boxes)
             self.lbl_state.setText("设置已保存，将在下一次比较时生效。")
             if self._result is not None:
                 self.lbl_state.setText("设置已保存；点击“重新比较”应用新设置。")
@@ -407,6 +419,9 @@ class MainWindow(QMainWindow):
             self._set_file(side, path)
 
     def _set_file(self, side: str, path: str, auto_compare: bool = False) -> None:
+        if self._busy:
+            self._send_toast("正在比较，请等待完成或取消后再更换文件。")
+            return
         try:
             info = classify(path)
         except IncompatibleFilesError as exc:
@@ -596,8 +611,10 @@ class MainWindow(QMainWindow):
         self.lbl_diff.setText(f"差异 {count} 处")
         self.lbl_ocr.setText("")
         if result.mode == CompareMode.IMAGE:
-            self.lbl_ocr.setText(
-                f"OCR：{result.image.left.engine if result.image else 'RapidOCR'}"
+            self.lbl_ocr.setText("OCR：RapidOCR（CPU，离线）")
+            self.lbl_ocr.setToolTip(
+                f"{result.image.left.engine if result.image else 'RapidOCR'}；"
+                "模型随安装包分发，无需联网"
             )
         warnings = list(dict.fromkeys(result.warnings))
         self._set_warnings(warnings)
@@ -684,8 +701,26 @@ class MainWindow(QMainWindow):
         tv = TextView()
         tv.set_side(text_cmp.left if side == "left" else text_cmp.right)
         tv.set_only_diffs(self.cb_only.isChecked())
-        tv.line_activated.connect(lambda _r: self._focus_in_pane(self.left_pane if side == "left" else self.right_pane))
+        tv.line_activated.connect(
+            lambda row, s=side: self._on_text_line_activated(s, row)
+        )
         return tv
+
+    def _on_text_line_activated(self, side: str, display_row: int) -> None:
+        self._set_focus_side(side)
+        tv = self._text_views.get(side)
+        if tv is None or tv.side() is None or self._result is None:
+            return
+        lines = tv.side().lines
+        if not (0 <= display_row < len(lines)):
+            return
+        diff_id = lines[display_row].diff_id
+        if diff_id is None:
+            return
+        for i, diff in enumerate(self._diffs):
+            if diff.id == diff_id:
+                self._show_diff(i)
+                return
 
     def _connect_text_scroll(self) -> None:
         if set(self._text_views) != {"left", "right"}:
@@ -723,6 +758,9 @@ class MainWindow(QMainWindow):
             ss = SpreadsheetSide()
             ss.load(wb, result.csv.table, side, show_tabs=False)
             ss.scroll_changed.connect(lambda vr, hr, s=side: self._on_sheet_scrolled(s, vr, hr))
+            ss.grid().cell_clicked.connect(
+                lambda row, col, s=side: self._on_grid_cell_clicked(s, row, col)
+            )
             stack.addWidget(ss)
             stack.addWidget(tv)
             stack.setCurrentIndex(index)
@@ -748,6 +786,9 @@ class MainWindow(QMainWindow):
             ss.load(wb, cmp, side, show_tabs=True)
             ss.sheet_selected.connect(lambda name, s=side: self._on_sheet_selected(s, name))
             ss.scroll_changed.connect(lambda vr, hr, s=side: self._on_sheet_scrolled(s, vr, hr))
+            ss.grid().cell_clicked.connect(
+                lambda row, col, s=side: self._on_grid_cell_clicked(s, row, col)
+            )
             pane.set_content(ss)
             self._sheet_sides[side] = ss
         initial = None
@@ -767,6 +808,9 @@ class MainWindow(QMainWindow):
 
         self.combo_view.setVisible(False)
         self.image_tools.setVisible(True)
+        self.cb_boxes.blockSignals(True)
+        self.cb_boxes.setChecked(self._settings.image.show_boxes)
+        self.cb_boxes.blockSignals(False)
         img = result.image
         for side, pane, page in (
             ("left", self.left_pane, img.left),
@@ -783,10 +827,67 @@ class MainWindow(QMainWindow):
     def _connect_image_views(self) -> None:
         if set(self._image_panes) != {"left", "right"}:
             return
-        for pane in self._image_panes.values():
+        self._image_sync_ready = False
+        for side, pane in self._image_panes.items():
             pane.set_sync_zoom(self.cb_sync.isChecked())
+            pane.zoom_changed.connect(lambda _z, s=side: self._sync_image_zoom(s))
+            pane.scroll_changed.connect(
+                lambda v, h, s=side: self._sync_image_scroll(s, v, h)
+            )
+        # 初次显示时两侧各自“适应窗口”；不同分辨率下缩放比例本来就不同，
+        # 等布局稳定后再启用同步缩放，避免小图把大图也放大导致裁切。
+        QTimer.singleShot(350, self._enable_image_sync)
+        self._update_zoom_label()
+
+    def _enable_image_sync(self) -> None:
+        self._image_sync_ready = True
+        self._update_zoom_label()
+
+    def _sync_image_zoom(self, source: str) -> None:
+        if not self._image_sync_ready:
+            return
+        if not self.cb_sync.isChecked() or self._sync_guard:
+            return
+        other = self._image_panes.get("right" if source == "left" else "left")
+        if other is None:
+            return
+        zoom = self._image_panes[source].zoom()
+        self._sync_guard = True
+        try:
+            other.set_zoom(zoom)
+        finally:
+            self._sync_guard = False
+        self._update_zoom_label()
+
+    def _sync_image_scroll(self, source: str, v: float, h: float) -> None:
+        if not self.cb_sync.isChecked() or self._sync_guard:
+            return
+        other = self._image_panes.get("right" if source == "left" else "left")
+        if other is None:
+            return
+        self._sync_guard = True
+        try:
+            other.set_scroll_ratio(v, h)
+        finally:
+            self._sync_guard = False
 
     # ================================================================== CSV/Excel
+    def _on_grid_cell_clicked(self, side: str, row: int, col: int) -> None:
+        self._set_focus_side(side)
+        ss = self._sheet_sides.get(side)
+        if ss is None:
+            return
+        diff = ss.grid().diff_at(row, col)
+        if diff is None:
+            return
+        for i, item in enumerate(self._diffs):
+            if item.id == diff.id:
+                self._show_diff(i)
+                return
+        sheet_name = self._diff_sheet_name(diff)
+        if sheet_name:
+            self._show_sheet_on_both(sheet_name)
+
     def _on_sheet_selected(self, side: str, name: str) -> None:
         if self._sync_guard or self._mode != CompareMode.EXCEL:
             return
@@ -819,14 +920,18 @@ class MainWindow(QMainWindow):
             return
         self._sync_guard = True
         try:
-            grid = other.grid()
-            for bar, ratio in (
-                (grid.verticalScrollBar(), vr),
-                (grid.horizontalScrollBar(), hr),
-            ):
-                span = bar.maximum() - bar.minimum()
-                if span > 0:
-                    bar.setValue(int(bar.minimum() + max(0.0, min(1.0, ratio)) * span))
+            setter = getattr(other, "set_scroll_ratio", None)
+            if callable(setter):
+                setter(vr, hr)
+            else:
+                grid = other.grid()
+                for bar, ratio in (
+                    (grid.verticalScrollBar(), vr),
+                    (grid.horizontalScrollBar(), hr),
+                ):
+                    span = bar.maximum() - bar.minimum()
+                    if span > 0:
+                        bar.setValue(int(bar.minimum() + max(0.0, min(1.0, ratio)) * span))
         finally:
             self._sync_guard = False
 
@@ -838,6 +943,8 @@ class MainWindow(QMainWindow):
             stack.setCurrentIndex(1 if self._view == "text" else 0)
         self._apply_view_filters()
         self._refresh_diffs()
+        if self._diffs:
+            self._show_diff(0)
         self.lbl_state.setText("已切换 CSV 视图。")
 
     # ================================================================== filters / nav
@@ -894,19 +1001,31 @@ class MainWindow(QMainWindow):
                 for pane in self._image_panes.values():
                     pane.reveal(diff)
             else:
-                if diff.sheet:
-                    self._show_sheet_on_both(diff.sheet)
+                sheet_name = self._diff_sheet_name(diff)
+                if sheet_name:
+                    self._show_sheet_on_both(sheet_name)
                 for ss in self._sheet_sides.values():
                     ss.reveal(diff)
         except Exception as exc:  # noqa: BLE001
             self.lbl_state.setText(f"定位差异失败：{exc}")
         title = diff.title or diff.id
         detail = f"：{diff.detail}" if diff.detail else ""
-        self.lbl_state.setText(f"差异 {index + 1}/{len(self._diffs)} — {title}{detail}")
+        message = f"差异 {index + 1}/{len(self._diffs)} — {title}{detail}"
+        if len(message) > 96:
+            message = message[:95] + "…"
+        self.lbl_state.setText(message)
+        self.lbl_state.setToolTip(f"{title}{detail}")
         if diff.severity.value == "uncertain":
             self.lbl_state.setStyleSheet("color:#8A3B00;")
         else:
             self.lbl_state.setStyleSheet("color:#374151;")
+
+    @staticmethod
+    def _diff_sheet_name(diff: DiffItem) -> str | None:
+        for loc in (diff.left, diff.right):
+            if loc is not None and loc.sheet:
+                return loc.sheet
+        return None
 
     def _on_only_diffs_toggled(self, checked: bool) -> None:
         self._settings.only_diffs = checked
@@ -969,27 +1088,41 @@ class MainWindow(QMainWindow):
         panes = list(self._image_panes.values())
         if not panes:
             return
-        if action == "fit":
-            for p in panes:
-                p.fit_to_window()
-        elif action == "actual":
-            for p in panes:
-                p.actual_size()
-        elif action == "zoom_in":
-            for p in panes:
-                p.zoom_in()
-        elif action == "zoom_out":
-            for p in panes:
-                p.zoom_out()
+        # 适应窗口/原始尺寸对两张不同尺寸的图分别执行；缩放按钮在“同步”开启时
+        # 只操作一侧，由同步信号带动另一侧，避免重复累乘。
+        if action in ("fit", "actual"):
+            self._sync_guard = True
+            try:
+                for p in panes:
+                    if action == "fit":
+                        p.fit_to_window()
+                    else:
+                        p.actual_size()
+            finally:
+                self._sync_guard = False
+        elif action in ("zoom_in", "zoom_out"):
+            targets = [self._image_panes.get("left")] if self.cb_sync.isChecked() else panes
+            for p in targets:
+                if p is None:
+                    continue
+                if action == "zoom_in":
+                    p.zoom_in()
+                else:
+                    p.zoom_out()
         QTimer.singleShot(0, self._update_zoom_label)
 
     def _update_zoom_label(self) -> None:
-        if "left" in self._image_panes:
-            try:
-                zoom = self._image_panes["left"].zoom()
-                self.lbl_zoom.setText(f"{round(zoom * 100)}%")
-            except Exception:
-                pass
+        try:
+            zooms = [p.zoom() for p in self._image_panes.values()]
+        except Exception:
+            return
+        if not zooms:
+            return
+        if len(zooms) == 1:
+            self.lbl_zoom.setText(f"{round(zooms[0] * 100)}%")
+        else:
+            a, b = (round(zooms[0] * 100), round(zooms[1] * 100))
+            self.lbl_zoom.setText(f"{a}% / {b}%")
 
     def _on_show_boxes(self, checked: bool) -> None:
         for pane in self._image_panes.values():
@@ -1006,12 +1139,13 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "OCR 校对", f"OCR 校对组件不可用：{exc}")
             return
         try:
-            dlg = OcrCorrectionDialog(self._result.image, self._ocr_service, self)
+            dlg = OcrCorrectionDialog(
+                self, self._result.image, self._ocr_service, self._settings.image
+            )
             if dlg.exec():
-                overrides = dlg.corrected_options(self._settings.image)
-                if overrides is not None:
-                    self._settings.image.text_overrides = overrides.text_overrides
-                    self._settings.image.manual_pairs = overrides.manual_pairs
+                corrected = dlg.corrected_options()
+                if corrected is not None:
+                    self._settings.image = corrected
                     self.lbl_state.setText("OCR 修正已应用，正在重新比较…")
                     self._start_compare()
         except Exception as exc:  # noqa: BLE001

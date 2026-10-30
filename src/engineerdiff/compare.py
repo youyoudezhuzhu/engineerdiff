@@ -134,14 +134,23 @@ def run_comparison(
             ocr_service = OcrService()
         progress(3, "正在加载 OCR 引擎…")
         _check(cancel)
-        img_cmp = compare_images(
-            left_path,
-            right_path,
-            settings.image,
-            ocr_service,
-            progress=lambda p, m: progress(5 + int(p * 0.9), m),
-            cancel=cancel,
-        )
+        try:
+            img_cmp = compare_images(
+                left_path,
+                right_path,
+                settings.image,
+                ocr_service,
+                progress=lambda p, m: progress(5 + int(p * 0.9), m),
+                cancel=cancel,
+            )
+        except Exception as exc:  # OcrCancelled 也是 OcrError 子类
+            try:
+                from .ocr.engine import OcrCancelled
+            except Exception:
+                OcrCancelled = ()  # type: ignore[assignment]
+            if OcrCancelled and isinstance(exc, OcrCancelled):
+                raise ComparisonCancelled("用户取消了 OCR 识别") from exc
+            raise
         result.image = img_cmp
         result.warnings.extend(img_cmp.warnings)
         progress(100, f"OCR 比较完成，共 {len(img_cmp.diffs)} 处差异")

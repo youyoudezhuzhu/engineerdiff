@@ -90,6 +90,7 @@ Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docs\user-guide.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\docs\known-limitations.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "..\docs\third-party-licenses.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "..\docs\screenshots\*"; DestDir: "{app}\docs\screenshots"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\docs\technical-selection.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]

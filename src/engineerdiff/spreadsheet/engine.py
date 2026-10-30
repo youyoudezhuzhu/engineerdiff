@@ -237,6 +237,12 @@ def _compare_numbers(
         scale = max(abs(left_number), abs(right_number))
         if difference <= Decimal(str(tolerance)) or difference <= Decimal(str(tolerance)) * scale:
             return _CellCompareResult(True)
+    if left_display == right_display:
+        # 例如显示格式相同（0.00）但底层数值不同，detail 需要给出原始值。
+        return _CellCompareResult(
+            False,
+            detail=f"数值不同：{left_display} ≠ {right_display}（原始值 {left_number} ≠ {right_number}）",
+        )
     if tolerance > 0:
         return _CellCompareResult(
             False,
@@ -512,13 +518,13 @@ def _smart_unpaired_row_diffs(
     ncols: int,
 ) -> list[DiffItem]:
     diffs: list[DiffItem] = []
+    present = side == "left"
     for col in range(ncols):
         if col >= sheet.ncols or row >= sheet.nrows:
             break
         cell = sheet.rows[row][col]
         if cell.type == CellType.BLANK:
             continue
-        present = side == "left"
         kind = DiffKind.REMOVED if present else DiffKind.ADDED
         diff = _build_cell_diff(
             sheet_name,
@@ -530,8 +536,8 @@ def _smart_unpaired_row_diffs(
             None if present else cell,
             present,
             not present,
-            cell.display,
-            "",
+            cell.display if present else "",
+            "" if present else cell.display,
             kind,
             detail="整行没有对应行（智能行对齐）",
             diff_id=f"cell:{sheet_name}:{'l' if present else 'r'}:{row}:{col}",

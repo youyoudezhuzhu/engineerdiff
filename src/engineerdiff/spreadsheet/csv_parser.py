@@ -15,12 +15,15 @@ import io
 import re
 from pathlib import Path
 
-from ..models import Cell, CellType, Sheet, Workbook
+from ..models import Cell, CellStyle, CellType, Sheet, Workbook
 
 CSV_SHEET_NAME = "CSV"
 
 _MIN_COL_WIDTH = 60.0
 _MAX_COL_WIDTH = 360.0
+_MULTILINE_MIN_COL_WIDTH = 180.0
+_MULTILINE_ROW_BASE_HEIGHT = 20.0
+_MULTILINE_ROW_PADDING = 6.0
 _SNIFF_SAMPLE_SIZE = 16_384
 _DELIMITERS = ",;\t|"
 
@@ -99,15 +102,24 @@ def _display_width(text: str) -> int:
     return width
 
 
-def _estimate_col_widths(rows: list[list[str]]) -> dict[int, float]:
+def _estimate_col_widths(
+    rows: list[list[str]],
+    multiline_cols: set[int] | None = None,
+) -> dict[int, float]:
     widths: dict[int, float] = {}
+    multiline_cols = multiline_cols or set()
     ncols = max((len(row) for row in rows), default=0)
     for col in range(ncols):
         longest = 0
         for row in rows:
             if col < len(row):
-                longest = max(longest, _display_width(row[col]))
+                # 多行字段按最长的一行估算，否则换行符会把列压得很窄。
+                for line in row[col].splitlines() or [""]:
+                    longest = max(longest, _display_width(line))
         estimated = longest * 7.0 + 24.0
+        if col in multiline_cols:
+            # 含换行的字段额外留出宽度，避免每行都折成很多段。
+            estimated = max(estimated, _MULTILINE_MIN_COL_WIDTH)
         widths[col] = float(min(_MAX_COL_WIDTH, max(_MIN_COL_WIDTH, round(estimated))))
     return widths
 
@@ -162,19 +174,35 @@ def parse_csv(path: str | Path) -> tuple[Sheet, str, list[str]]:
 
     ragged_rows = 0
     rows: list[list[Cell]] = []
-    for raw_row in raw_rows:
-        if len(raw_row) != ncols:
+    multiline_cols: set[int] = set()
+    row_heights: dict[int, float] = {}
+    for row_index, raw_row in enumerate(raw_rows):
+        if len(raw_row) != ncols and any(field != "" for field in raw_row):
             ragged_rows += 1
+        line_count = 1
         cells: list[Cell] = []
         for col in range(ncols):
             field = raw_row[col] if col < len(raw_row) else ""
             if field == "":
                 cells.append(Cell())
-            else:
-                cells.append(Cell(display=field, type=CellType.TEXT, value=field))
+                continue
+            style = CellStyle()
+            if "\n" in field or "\r" in field:
+                # 契约要求正确处理引号内换行：标记自动换行并按行数抬高行高，
+                # 否则 GridView 只按 20px 行高绘制会裁掉第二行。
+                style.wrap = True
+                multiline_cols.add(col)
+                line_count = max(line_count, len(re.findall(r"\r\n|\r|\n", field)) + 1)
+            cells.append(Cell(display=field, type=CellType.TEXT, value=field, style=style))
         rows.append(cells)
+        if line_count > 1:
+            row_heights[row_index] = max(
+                _MULTILINE_ROW_BASE_HEIGHT,
+                _MULTILINE_ROW_BASE_HEIGHT * line_count + _MULTILINE_ROW_PADDING,
+            )
     sheet.rows = rows
-    sheet.col_widths = _estimate_col_widths(raw_rows)
+    sheet.row_heights = row_heights
+    sheet.col_widths = _estimate_col_widths(raw_rows, multiline_cols)
     sheet.default_col_width = float(_MIN_COL_WIDTH)
     sheet.default_row_height = 20.0
     if ragged_rows:

@@ -178,6 +178,15 @@ class TextView(QAbstractScrollArea):
             return self._visible[pos]
         return None
 
+    def mousePressEvent(self, event):  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            row = self._line_at(event.position().toPoint().y())
+            if row is not None and self._side is not None:
+                line = self._side.lines[row]
+                if line.diff_id is not None or line.status != LineStatus.EQUAL:
+                    self.line_activated.emit(row)
+        super().mousePressEvent(event)
+
     def mouseDoubleClickEvent(self, event):  # noqa: N802
         row = self._line_at(event.position().toPoint().y())
         if row is not None:

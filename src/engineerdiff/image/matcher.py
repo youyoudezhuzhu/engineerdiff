@@ -121,6 +121,19 @@ def _comparable(text: str) -> str:
     return (text or "").strip()
 
 
+def _ocr_confusable_only(text_a: str, text_b: str) -> bool:
+    """两侧文本是否只差 OCR 常见混淆（0/O、1/I/l/|、全半角、大小写、空白）。
+
+    仅用于把“疑似 OCR 误识别”的匹配差异降级为橙色待复核；真实数字/版本号变化
+    （如 1.50 vs 1.80、1.2.3 vs 1.2.4）经混淆归一后仍不同，仍为红色确定差异。
+    """
+    if _comparable(text_a) == _comparable(text_b):
+        return False
+    normalized_a = _confusable(text_a)
+    normalized_b = _confusable(text_b)
+    return bool(normalized_a) and normalized_a == normalized_b
+
+
 # ---------------------------------------------------------------------------
 # 几何变换
 # ---------------------------------------------------------------------------
@@ -919,12 +932,15 @@ def _matched_diff(a: OcrBox, b: OcrBox, pair: _Pair, options: ImageOptions) -> D
     seg_a = _side_segments(a.text, b.text, a.bbox, spans_a)
     seg_b = _side_segments(b.text, a.text, b.bbox, spans_b)
     low_confidence = min(a.confidence, b.confidence) < float(options.confidence_threshold)
-    uncertain = low_confidence or pair.ambiguous
+    confusable_only = _ocr_confusable_only(a.text, b.text)
+    uncertain = low_confidence or pair.ambiguous or confusable_only
     reasons: list[str] = []
     if low_confidence:
         reasons.append("低置信度")
     if pair.ambiguous:
         reasons.append("配对存在歧义，建议人工复核")
+    if confusable_only:
+        reasons.append("疑似 OCR 字符混淆（0/O、1/I/l），请人工复核")
     if pair.manual:
         reasons.append("人工指定对应")
     detail = (
