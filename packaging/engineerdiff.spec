@@ -131,20 +131,25 @@ except ImportError as exc:  # pragma: no cover - PySide6 是硬依赖
 #    的安装包。构建脚本还会额外复制一份到 dist 根目录，双保险。
 if sys.platform == "win32":
     _system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
-    _vc_globs = (
-        "msvcp140*.dll",
-        "vcruntime140*.dll",
+    # 只允许再分发 release 版 VC++ 运行库；显式白名单避免把 msvcp140d*、
+    # msvcp140_clr0400 等调试/CLR 专用 DLL 打进去（体积与许可风险）。
+    _vc_allow = (
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "msvcp140_atomic_wait.dll",
+        "msvcp140_codecvt_ids.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
         "concrt140.dll",
         "vcomp140.dll",
     )
     _vc_found: set[str] = set()
-    for _pattern in _vc_globs:
-        for _dll in sorted(_system32.glob(_pattern)):
-            # 排除调试版（*d.dll）以及与 ARM64 无关的同名文件
-            if _dll.name.lower().endswith("d.dll"):
-                continue
+    for _name in _vc_allow:
+        _dll = _system32 / _name
+        if _dll.is_file():
             binaries.append((str(_dll), "."))
-            _vc_found.add(_dll.name.lower())
+            _vc_found.add(_name.lower())
     _vc_required = {"msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"}
     _vc_missing = sorted(_vc_required - _vc_found)
     if _vc_missing:

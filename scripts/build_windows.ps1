@@ -123,13 +123,19 @@ try {
     # VC++ 运行库再分发 DLL：spec 已收集到 _internal；这里再复制到 dist 根目录，
     # 确保 Windows 加载器优先从 exe 同目录解析 msvcp140/vcruntime140 等依赖。
     $system32 = Join-Path $env:SystemRoot 'System32'
-    $vcPatterns = @('msvcp140*.dll', 'vcruntime140*.dll', 'concrt140.dll', 'vcomp140.dll')
+    # 显式白名单：仅 release 版 VC++ 运行库（不要 msvcp140d* / CLR 专用 DLL）。
+    $vcNames = @(
+        'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
+        'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll',
+        'vcruntime140.dll', 'vcruntime140_1.dll',
+        'concrt140.dll', 'vcomp140.dll'
+    )
     $vcCopied = @()
-    foreach ($pattern in $vcPatterns) {
-        foreach ($dll in (Get-ChildItem -Path $system32 -Filter $pattern -File -ErrorAction SilentlyContinue)) {
-            if ($dll.Name.ToLowerInvariant().EndsWith('d.dll')) { continue }
-            Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $distDir $dll.Name) -Force
-            $vcCopied += $dll.Name
+    foreach ($name in $vcNames) {
+        $dll = Join-Path $system32 $name
+        if (Test-Path -LiteralPath $dll) {
+            Copy-Item -LiteralPath $dll -Destination (Join-Path $distDir $name) -Force
+            $vcCopied += $name
         }
     }
     foreach ($required in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
