@@ -124,12 +124,12 @@ jobs:
               Select-Object -ExpandProperty FullName | Write-Host
             throw '无法获取 Inno Setup ISCC.exe'
           }
-          $ver = (Get-Item -LiteralPath $iscc).VersionInfo.FileVersion
-          if ([int]((Get-Item -LiteralPath $iscc).VersionInfo.FileMajorPart) -lt 6) {
-            throw "需要 Inno Setup 6+，当前为 $ver（$iscc）"
-          }
+          # 注意：Inno Setup 的 ISCC.exe 版本资源可能为 0.0.0.0，不能据此拒绝；
+          # 是否存在/可执行由 ISCC 编译步骤实际验证。
+          $probe = & $iscc /? 2>&1 | Select-Object -First 3
+          Write-Host ($probe -join "`n")
           "iscc=$iscc" >> $env:GITHUB_OUTPUT
-          Write-Host "ISCC = $iscc（Inno Setup $ver）"
+          Write-Host "ISCC = $iscc"
 
       - name: Build, verify bundle and create installer
         id: build

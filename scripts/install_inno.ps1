@@ -33,16 +33,11 @@ function Find-Iscc {
     $output = & $findScript 2>$null
     if ($LASTEXITCODE -eq 0 -and $output) {
         $path = ($output | Select-Object -Last 1)
-        try {
-            $major = [int]((Get-Item -LiteralPath $path).VersionInfo.FileMajorPart)
-        }
-        catch {
-            $major = 0
-        }
-        if ($major -ge 6) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
+            # ISCC.exe 的版本资源可能为 0.0.0.0，不能据此判断版本；存在即返回，
+            # 由实际编译验证兼容性。
             return $path
         }
-        Write-Warning "忽略旧版本 Inno Setup（需要 6+）：$path"
     }
     return $null
 }
