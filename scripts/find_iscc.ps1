@@ -51,6 +51,13 @@ foreach ($base in $bases) {
         Add-Candidate (Join-Path $base "Inno Setup $major\ISCC.exe")
     }
 }
+# 部分 Inno Setup 安装器在非管理员/当前用户模式下装到 LocalAppData
+foreach ($base in @($env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+    if ([string]::IsNullOrWhiteSpace($base)) { continue }
+    foreach ($major in @('6', '7')) {
+        Add-Candidate (Join-Path $base "Inno Setup $major\ISCC.exe")
+    }
+}
 
 # 4) 注册表卸载项
 $uninstallRoots = @(

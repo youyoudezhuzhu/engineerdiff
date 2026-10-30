@@ -60,16 +60,36 @@ $githubTag = 'is-' + ($Version -replace '\.', '_')
 $downloadUrl = "https://github.com/jrsoftware/issrc/releases/download/$githubTag/innosetup-$Version.exe"
 $downloadDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
 $setupPath = Join-Path $downloadDir "innosetup-$Version.exe"
+$customInstallDir = Join-Path $downloadDir 'InnoSetup6'
+function Write-Diag([string]$Message) {
+    [Console]::Error.WriteLine("DIAG(install_inno): $Message")
+}
 try {
     Write-Host "尝试从官方 GitHub Release 下载 Inno Setup $Version ..."
+    Write-Diag "url=$downloadUrl"
     Invoke-WebRequest -Uri $downloadUrl -OutFile $setupPath -UseBasicParsing -TimeoutSec 180
-    if ((Test-Path -LiteralPath $setupPath) -and ((Get-Item -LiteralPath $setupPath).Length -gt 5000000)) {
-        $installArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/ALLUSERS')
-        $proc = Start-Process -FilePath $setupPath -ArgumentList $installArgs -Wait -PassThru
-        if ($proc.ExitCode -ne 0) {
-            Write-Warning "Inno Setup 全用户静默安装失败（exit=$($proc.ExitCode)），尝试当前用户安装 ..."
-            $proc = Start-Process -FilePath $setupPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER') -Wait -PassThru
+    $size = if (Test-Path -LiteralPath $setupPath) { (Get-Item -LiteralPath $setupPath).Length } else { 0 }
+    Write-Diag "downloaded=$setupPath size=$size"
+    if ($size -gt 5000000) {
+        # 显式指定临时目录，避免安装到 Program Files 或用户目录后 find 脚本未覆盖。
+        Write-Diag "installing to $customInstallDir (ALLUSERS)"
+        $proc = Start-Process -FilePath $setupPath -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
+            '/ALLUSERS', "/DIR=`"$customInstallDir`""
+        ) -Wait -PassThru
+        Write-Diag "installer exit=$($proc.ExitCode)"
+        $directIscc = Join-Path $customInstallDir 'ISCC.exe'
+        if (Test-Path -LiteralPath $directIscc) {
+            Write-Host "Inno Setup 安装成功（GitHub Release）：$directIscc"
+            Write-Output $directIscc
+            exit 0
         }
+        # 有些 Inno 版本忽略 /DIR，改为当前用户安装后继续探测。
+        Write-Diag "ISCC not found at custom dir; try CURRENTUSER default install"
+        $proc = Start-Process -FilePath $setupPath -ArgumentList @(
+            '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER'
+        ) -Wait -PassThru
+        Write-Diag "currentuser installer exit=$($proc.ExitCode)"
         Update-ProcessPath
         $iscc = Find-Iscc
         if ($iscc) {
@@ -77,11 +97,11 @@ try {
             Write-Output $iscc
             exit 0
         }
-        Write-Warning '官方安装器执行后仍未找到 ISCC.exe，继续尝试包管理器 ...'
+        Write-Diag 'official installer finished but ISCC.exe still not found'
     }
 }
 catch {
-    Write-Warning "GitHub Release 下载/安装 Inno Setup 失败：$($_.Exception.Message)"
+    Write-Diag "GitHub Release download/install failed: $($_.Exception.Message)"
 }
 
 $choco = Get-Command choco.exe -ErrorAction SilentlyContinue
