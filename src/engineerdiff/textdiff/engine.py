@@ -466,9 +466,10 @@ def compare_texts(
                 )
             first_left = next((x for x in llines if x.text), None)
             first_right = next((x for x in rlines if x.text), None)
+            eol_id = f"text:{counter}"
             diffs.append(
                 DiffItem(
-                    id=f"text:{counter}",
+                    id=eol_id,
                     kind=DiffKind.MODIFIED,
                     severity=Severity.CONFIRMED,
                     title="换行符差异",
@@ -486,6 +487,12 @@ def compare_texts(
                     group="text",
                 )
             )
+            # 让“仅显示差异”模式也能看到这条差异（通常落在第一行上）。
+            for lines in (left_lines, right_lines):
+                for line in lines:
+                    if line.line_no is not None:
+                        line.diff_id = eol_id
+                        break
 
     left_side = TextSide(
         path=left_path,
