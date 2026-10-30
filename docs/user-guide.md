@@ -285,7 +285,8 @@ EngineerDiff 支持少量命令行参数（主要用于自动化与安装包自�
 | 图片差异框偏移 | 左右截图版面差异过大（如完全不同的窗口布局）时匹配可能不可靠，此时会以橙色提示人工复核 |
 | 比较结果与预期不同 | 检查“设置”中的忽略项、公式策略、数值容差、智能行对齐是否开启 |
 | 卸载后设置仍在 | 设置与 OCR 缓存在 `%LOCALAPPDATA%\EngineerDiff`，默认保留；可手动删除 |
-| 杀毒软件误报 | 程序为 PyInstaller 打包的未签名 exe，可能被启发式误报；请添加信任或从 Release 重新下载并校验哈希 |
+| 杀毒软件 / Defender 误报 | 程序为未签名的 PyInstaller/Inno 产物，可能被启发式误报；先校验 SHA-256，按 [Windows Defender 误报处理](windows-defender.md) 向 Microsoft 提交或添加最小范围排除；根治需代码签名证书 |
+| 拖入文件没有反应 | 本版本起拖入即自动比较；若正在 OCR/比较，会先取消当前任务再应用新文件；仍无反应时确认扩展名受支持 |
 
 ---
 
@@ -294,7 +295,7 @@ EngineerDiff 支持少量命令行参数（主要用于自动化与安装包自�
 | 内容 | 位置 |
 |---|---|
 | 程序文件 | `%LOCALAPPDATA%\Programs\EngineerDiff`（默认 per-user 安装） |
-| 使用说明/已知限制/第三方许可证 | 安装目录 `docs\`、`LICENSES\`、`THIRD-PARTY-NOTICES.md`、`MODEL_LICENSES.md` |
+| 使用说明/已知限制/第三方许可证/Defender 说明 | 安装目录 `docs\`、`LICENSES\`、`THIRD-PARTY-NOTICES.md`、`MODEL_LICENSES.md` |
 | 比较设置 | 注册表 `HKCU\Software\EngineerDiff\EngineerDiff` |
 | OCR 缓存 | `%LOCALAPPDATA%\EngineerDiff`（由程序自动创建，可清除） |
 | 崩溃日志 | `%USERPROFILE%\.engineerdiff-crash.log` |
