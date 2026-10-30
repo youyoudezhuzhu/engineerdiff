@@ -1,4 +1,4 @@
-; EngineerDiff Inno Setup 6 安装包脚本
+﻿; EngineerDiff Inno Setup 6 安装包脚本
 ; ---------------------------------------------------------------------------
 ; 目标：
 ;   * Windows x64，默认 per-user 安装（无需管理员）：
@@ -84,14 +84,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; PyInstaller one-dir 全量产物（含 _internal 下的 Qt 插件、OCR 模型、ONNX Runtime DLL）
+; PyInstaller one-dir 全量产物已包含 docs\、LICENSES\、NOTICE、LICENSE 与截图，
+; 不再逐项重复添加，避免 Inno 的重复目标文件条目。
 Source: "{#SOURCE_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; 交付文档与许可证（同时 PyInstaller 包内也有一份）
-Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\docs\user-guide.md"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\docs\known-limitations.md"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\docs\third-party-licenses.md"; DestDir: "{app}\docs"; Flags: ignoreversion
-Source: "..\docs\screenshots\*"; DestDir: "{app}\docs\screenshots"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\docs\technical-selection.md"; DestDir: "{app}\docs"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#APP_NAME}"; Filename: "{app}\{#APP_EXE}"; WorkingDir: "{app}"; Comment: "{#APP_NAME_CN}"
