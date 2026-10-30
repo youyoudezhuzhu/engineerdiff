@@ -40,7 +40,9 @@ concurrency:
 jobs:
   build:
     name: Windows x64 构建与自检
-    runs-on: windows-latest
+    # Windows Server 2022 镜像自带 Inno Setup 6.7.x；windows-latest 已迁移到
+    # Server 2025，部分镜像尚未预装 Inno Setup。构建产物仍是 Windows x64。
+    runs-on: windows-2022
     timeout-minutes: 75
 
     steps:

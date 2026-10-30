@@ -92,10 +92,31 @@ def test_excel_sheet_sync_and_placeholder(qapp, tmp_path: Path):
     # Sheet 顺序不同但按名称配对；内容相同的工作表不标红
     assert window._result.workbook.sheet_by_name("保护定值").status.value == "different"
     assert window._result.workbook.sheet_by_name("软件版本").status.value == "different"
-    # 点击右侧“保护定值”，左侧同步
+    # 关闭 Sheet 同步后，切换一侧不应带动另一侧
+    assert window.cb_sheet_sync.isVisible()
+    window.cb_sheet_sync.setChecked(False)
+    window._sheet_sides["left"].show_sheet("参数表")
+    window._sheet_sides["right"].show_sheet("软件版本")
+    window._on_sheet_selected("right", "软件版本")
+    qapp.processEvents()
+    assert window._sheet_sides["left"].current_sheet() == "参数表"
+    # 打开同步，点击右侧“保护定值”，左侧同步
+    window.cb_sheet_sync.setChecked(True)
     window._on_sheet_selected("right", "保护定值")
     qapp.processEvents()
     assert window._sheet_sides["left"].current_sheet() == "保护定值"
+    # 表格缩放控件（Excel 必须支持缩放）
+    assert window.sheet_tools.isVisible()
+    before = window._sheet_sides["left"].grid().zoom()
+    window._sheet_zoom_action(1)
+    qapp.processEvents()
+    assert window._sheet_sides["left"].grid().zoom() > before
+    assert window._sheet_sides["right"].grid().zoom() == pytest.approx(
+        window._sheet_sides["left"].grid().zoom(), rel=1e-6
+    )
+    window._sheet_zoom_action(0)
+    qapp.processEvents()
+    assert window._sheet_sides["left"].grid().zoom() == pytest.approx(1.0)
     # 导航到仅左侧存在的 Sheet，右侧显示占位
     for i, diff in enumerate(window._diffs):
         if diff.kind.value == "only_left":

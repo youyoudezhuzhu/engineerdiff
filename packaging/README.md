@@ -59,7 +59,7 @@ VC++ 运行库 DLL）、`docs\`（含 `screenshots\` 界面截图）、`LICENSES
 ## spec 中的 Windows 专属项
 
 以下逻辑在 Linux 本地构建时不会生效或不可验证，真实结果以 GitHub Actions
-`windows-latest`（工作流 `.github/workflows/build-windows.yml`）为准：
+`windows-2022`（工作流 `.github/workflows/build-windows.yml`）为准：
 
 1. `EXE(icon=src/engineerdiff/resources/engineerdiff.ico, version=packaging/version_info.txt)`
    仅在 `sys.platform == "win32"` 时生效；Linux 产物无图标/版本资源。

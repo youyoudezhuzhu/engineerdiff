@@ -149,6 +149,24 @@ class MainWindow(QMainWindow):
         self.cb_only = QCheckBox("仅显示差异")
         self.cb_only.setChecked(self._settings.only_diffs)
         self.cb_only.setToolTip("文本/表格视图只显示差异及其相邻上下文")
+        self.cb_sheet_sync = QCheckBox("同步 Sheet")
+        self.cb_sheet_sync.setChecked(self._settings.sync_sheets)
+        self.cb_sheet_sync.setToolTip("切换 Excel 工作表时，两侧自动切换到同名工作表（可独立关闭）")
+        self.cb_sheet_sync.setVisible(False)
+        self.sheet_tools = QWidget()
+        st = QHBoxLayout(self.sheet_tools)
+        st.setContentsMargins(0, 0, 0, 0)
+        st.setSpacing(4)
+        self.btn_sheet_zoom_out = self._tool_button("−", "缩小表格")
+        self.btn_sheet_zoom_in = self._tool_button("+", "放大表格")
+        self.btn_sheet_zoom_reset = self._tool_button("100%", "表格缩放复位")
+        self.btn_sheet_zoom_reset.setMinimumWidth(52)
+        st.addWidget(QLabel("表格缩放"))
+        st.addWidget(self.btn_sheet_zoom_out)
+        st.addWidget(self.btn_sheet_zoom_reset)
+        st.addWidget(self.btn_sheet_zoom_in)
+        self.sheet_tools.setVisible(False)
+        self._sheet_zoom = 1.0
         self._sep1 = self._vsep()
         self.combo_view = QComboBox()
         self.combo_view.addItem("表格视图", "table")
@@ -163,6 +181,8 @@ class MainWindow(QMainWindow):
         row2.addWidget(self.cb_sync)
         row2.addWidget(self.cb_only)
         row2.addWidget(self.combo_view)
+        row2.addWidget(self.cb_sheet_sync)
+        row2.addWidget(self.sheet_tools)
         row2.addStretch(1)
 
         # 图片控件组
@@ -269,6 +289,7 @@ class MainWindow(QMainWindow):
         self.btn_next.clicked.connect(lambda: self._step_diff(1))
         self.cb_sync.toggled.connect(self._on_sync_toggled)
         self.cb_only.toggled.connect(self._on_only_diffs_toggled)
+        self.cb_sheet_sync.toggled.connect(self._on_sheet_sync_toggled)
         self.combo_view.currentIndexChanged.connect(self._on_view_changed)
         self.btn_fit.clicked.connect(lambda: self._image_action("fit"))
         self.btn_actual.clicked.connect(lambda: self._image_action("actual"))
@@ -276,6 +297,9 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(lambda: self._image_action("zoom_out"))
         self.cb_boxes.toggled.connect(self._on_show_boxes)
         self.btn_ocr_fix.clicked.connect(self._open_ocr_correction)
+        self.btn_sheet_zoom_in.clicked.connect(lambda: self._sheet_zoom_action(1))
+        self.btn_sheet_zoom_out.clicked.connect(lambda: self._sheet_zoom_action(-1))
+        self.btn_sheet_zoom_reset.clicked.connect(lambda: self._sheet_zoom_action(0))
         self.btn_warning.clicked.connect(self._show_warnings)
         self.btn_cancel_worker.clicked.connect(self._cancel_worker)
         self.left_pane.file_dropped.connect(lambda p: self._set_file("left", p))
@@ -371,6 +395,7 @@ class MainWindow(QMainWindow):
             self._settings = dlg.result_settings()
             self.cb_sync.setChecked(self._settings.sync_scroll)
             self.cb_only.setChecked(self._settings.only_diffs)
+            self.cb_sheet_sync.setChecked(self._settings.sync_sheets)
             self._save_settings()
             self.cb_boxes.blockSignals(True)
             self.cb_boxes.setChecked(self._settings.image.show_boxes)
@@ -694,6 +719,8 @@ class MainWindow(QMainWindow):
             self._view = "image"
         else:
             raise RuntimeError("比较结果缺少对应模式的视图数据。")
+        if self._mode in (CompareMode.CSV, CompareMode.EXCEL):
+            self._apply_sheet_zoom()
         self._apply_view_filters()
         self._refresh_diffs()
 
@@ -891,7 +918,7 @@ class MainWindow(QMainWindow):
     def _on_sheet_selected(self, side: str, name: str) -> None:
         if self._sync_guard or self._mode != CompareMode.EXCEL:
             return
-        if not self.cb_sync.isChecked():
+        if not self.cb_sheet_sync.isChecked():
             return
         other = "right" if side == "left" else "left"
         target = self._sheet_sides.get(other)
@@ -939,6 +966,7 @@ class MainWindow(QMainWindow):
         if self._mode != CompareMode.CSV or not self._csv_stacks:
             return
         self._view = self.combo_view.currentData() or "table"
+        self.sheet_tools.setVisible(self._view == "table")
         for stack in self._csv_stacks.values():
             stack.setCurrentIndex(1 if self._view == "text" else 0)
         self._apply_view_filters()
@@ -1041,6 +1069,10 @@ class MainWindow(QMainWindow):
         self._save_settings()
         for pane in self._image_panes.values():
             pane.set_sync_zoom(checked)
+
+    def _on_sheet_sync_toggled(self, checked: bool) -> None:
+        self._settings.sync_sheets = checked
+        self._save_settings()
         if checked and self._mode == CompareMode.EXCEL:
             current = self._sheet_sides.get("left")
             if current is not None:
@@ -1082,6 +1114,27 @@ class MainWindow(QMainWindow):
         warnings = getattr(self, "_warnings", [])
         if warnings:
             QMessageBox.information(self, "比较提示", "\n\n".join(f"• {w}" for w in warnings))
+
+    # ================================================================== table zoom
+    def _sheet_zoom_action(self, direction: int) -> None:
+        if direction == 0:
+            self._sheet_zoom = 1.0
+        else:
+            self._sheet_zoom = max(0.5, min(2.5, self._sheet_zoom + 0.1 * direction))
+        self._apply_sheet_zoom()
+
+    def _apply_sheet_zoom(self) -> None:
+        for pane in self._sheet_sides.values():
+            try:
+                pane.set_zoom(self._sheet_zoom)
+            except Exception:
+                pass
+        if self.sheet_tools.isVisible():
+            self.btn_sheet_zoom_reset.setText(f"{round(self._sheet_zoom * 100)}%")
+
+    def _reset_sheet_zoom(self) -> None:
+        self._sheet_zoom = 1.0
+        self._apply_sheet_zoom()
 
     # ================================================================== image controls
     def _image_action(self, action: str) -> None:
@@ -1162,7 +1215,10 @@ class MainWindow(QMainWindow):
         is_excel = mode == CompareMode.EXCEL
         is_image = mode == CompareMode.IMAGE
         self.combo_view.setVisible(is_csv)
+        self.cb_sheet_sync.setVisible(is_excel)
+        self.sheet_tools.setVisible(is_csv or is_excel)
         self.image_tools.setVisible(is_image)
+        self.btn_sheet_zoom_reset.setText(f"{round(self._sheet_zoom * 100)}%")
         self.cb_only.setEnabled(not is_image)
         self.cb_sync.setEnabled(True)
         self.btn_ocr_fix.setEnabled(is_image)
